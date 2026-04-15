@@ -1,0 +1,75 @@
+{
+  "SessionLayout": {
+    "title": "readmycareer.com",
+    "subtitle": "AI 커리어 코치 — 이력서 갭 분석부터 주차별 플랜까지",
+    "steps": {
+      "upload": "이력서 업로드",
+      "goal": "목표 설정",
+      "plan": "커리어 플랜"
+    }
+  },
+  "ResumeUpload": {
+    "title": "이력서 업로드",
+    "description": "PDF 또는 Word(.docx) 파일을 업로드하세요. 최대 10MB",
+    "dragPrompt": "파일을 드래그하거나 클릭하여 업로드",
+    "supportedFormats": "PDF, DOCX 지원 · 최대 10MB",
+    "replacePrompt": "다른 파일로 교체하려면 클릭하세요",
+    "analyzing": "이력서 분석 중... ({fileName})",
+    "parseError": "파싱 실패",
+    "genericError": "오류가 발생했습니다."
+  },
+  "GoalSetting": {
+    "title": "목표 설정",
+    "description": "지원하려는 직무와 준비 기간을 설정하세요.",
+    "targetRoleLabel": "지원 직무",
+    "required": "*",
+    "targetCompanyLabel": "목표 기업",
+    "optional": "(선택)",
+    "durationLabel": "준비 기간",
+    "startDateLabel": "시작일",
+    "durations": {
+      "1month": "1개월",
+      "2months": "2개월",
+      "3months": "3개월",
+      "4months": "4개월",
+      "6months": "6개월"
+    },
+    "preparingAnalysis": "분석 준비 중...",
+    "analysisComplete": "완료!",
+    "submitButton": "갭 분석 시작",
+    "submittingButton": "분석 중...",
+    "validationError": "지원 직무를 입력해주세요.",
+    "requestError": "분석 요청 실패",
+    "analysisError": "분석 실패",
+    "genericError": "분석 중 오류가 발생했습니다."
+  },
+  "RoadmapView": {
+    "defaultTitle": "커리어 플랜",
+    "chatButton": "AI 코치와 채팅",
+    "noData": "플랜 데이터를 불러올 수 없습니다.",
+    "weeksUnit": "주",
+    "completed": "완료",
+    "overallProgress": "전체 진행률",
+    "todoCount": "{count}개"
+  },
+  "ChatInterface": {
+    "greeting": "안녕하세요! AI 커리어 코치입니다. 커리어 준비에 관해 궁금한 점을 자유롭게 질문해주세요.",
+    "placeholder": "질문을 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)",
+    "sendButton": "전송",
+    "suggestedQuestions": "추천 질문",
+    "errorPrefix": "오류: {message}",
+    "genericError": "오류가 발생했습니다.",
+    "noStream": "스트림 없음",
+    "questions": {
+      "q1": "내 이력서에서 가장 부족한 부분이 무엇인가요?",
+      "q2": "이번 주에 가장 먼저 해야 할 일이 뭔가요?",
+      "q3": "지원 직무에서 가장 중요한 스킬은 무엇인가요?",
+      "q4": "현재 매칭 점수를 어떻게 올릴 수 있나요?"
+    }
+  },
+  "FloatingChat": {
+    "title": "AI 커리어 코치",
+    "closeLabel": "닫기",
+    "fabLabel": "AI 코치와 채팅"
+  }
+}

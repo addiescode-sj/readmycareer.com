@@ -1,0 +1,75 @@
+{
+  "SessionLayout": {
+    "title": "readmycareer.com",
+    "subtitle": "AI Career Coach — From Resume Gap Analysis to Weekly Plans",
+    "steps": {
+      "upload": "Resume Upload",
+      "goal": "Goal Setting",
+      "plan": "Career Plan"
+    }
+  },
+  "ResumeUpload": {
+    "title": "Upload Resume",
+    "description": "Upload a PDF or Word (.docx) file. Max 10MB.",
+    "dragPrompt": "Drag a file here or click to upload",
+    "supportedFormats": "PDF, DOCX supported · Max 10MB",
+    "replacePrompt": "Click to replace with a different file",
+    "analyzing": "Analyzing resume... ({fileName})",
+    "parseError": "Parse failed",
+    "genericError": "An error occurred."
+  },
+  "GoalSetting": {
+    "title": "Set Your Goal",
+    "description": "Set the role you're targeting and your preparation period.",
+    "targetRoleLabel": "Target Role",
+    "required": "*",
+    "targetCompanyLabel": "Target Company",
+    "optional": "(optional)",
+    "durationLabel": "Preparation Period",
+    "startDateLabel": "Start Date",
+    "durations": {
+      "1month": "1 month",
+      "2months": "2 months",
+      "3months": "3 months",
+      "4months": "4 months",
+      "6months": "6 months"
+    },
+    "preparingAnalysis": "Preparing analysis...",
+    "analysisComplete": "Done!",
+    "submitButton": "Start Gap Analysis",
+    "submittingButton": "Analyzing...",
+    "validationError": "Please enter your target role.",
+    "requestError": "Analysis request failed",
+    "analysisError": "Analysis failed",
+    "genericError": "An error occurred during analysis."
+  },
+  "RoadmapView": {
+    "defaultTitle": "Career Plan",
+    "chatButton": "Chat with AI Coach",
+    "noData": "Could not load plan data.",
+    "weeksUnit": "weeks",
+    "completed": "done",
+    "overallProgress": "Overall Progress",
+    "todoCount": "{count} tasks"
+  },
+  "ChatInterface": {
+    "greeting": "Hello! I'm your AI Career Coach. Feel free to ask me anything about your career preparation.",
+    "placeholder": "Type your question... (Enter to send, Shift+Enter for new line)",
+    "sendButton": "Send",
+    "suggestedQuestions": "Suggested Questions",
+    "errorPrefix": "Error: {message}",
+    "genericError": "An error occurred.",
+    "noStream": "No stream",
+    "questions": {
+      "q1": "What is the weakest part of my resume?",
+      "q2": "What should I tackle first this week?",
+      "q3": "What are the most important skills for my target role?",
+      "q4": "How can I improve my current matching score?"
+    }
+  },
+  "FloatingChat": {
+    "title": "AI Career Coach",
+    "closeLabel": "Close",
+    "fabLabel": "Chat with AI Coach"
+  }
+}
