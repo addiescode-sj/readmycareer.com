@@ -3,39 +3,116 @@
 import { useState, useRef } from "react";
 import { useTranslations } from "next-intl";
 
+type ParseStage = "extracting" | "parsing" | null;
+type ParseError = { code: string; message: string } | null;
+
 interface Props {
   onParsed: (resumeJson: Record<string, unknown>) => void;
+}
+
+function getErrorMessage(
+  err: NonNullable<ParseError>,
+  t: ReturnType<typeof useTranslations<"ResumeUpload">>
+): string {
+  switch (err.code) {
+    case "EXTRACT_EMPTY":  return t("errorScannedPdf");
+    case "EXTRACT_FAILED": return t("errorExtractFailed");
+    case "PARSE_TIMEOUT":  return t("errorTimeout");
+    case "PARSE_QUOTA":    return t("errorQuota");
+    case "PARSE_FAILED":   return t("errorParseFailed");
+    case "VALIDATION":     return err.message || t("parseError");
+    default:               return t("genericError");
+  }
 }
 
 export default function ResumeUpload({ onParsed }: Props) {
   const t = useTranslations("ResumeUpload");
   const [isDragging, setIsDragging] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<ParseStage>(null);
+  const [parseError, setParseError] = useState<ParseError>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [lastFile, setLastFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const isLoading = stage !== null;
+
   async function handleFile(file: File) {
-    setError(null);
+    setParseError(null);
     setFileName(file.name);
-    setIsLoading(true);
+    setLastFile(file);
+    setStage("extracting");
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    let res: Response;
+    try {
+      res = await fetch("/api/resume", { method: "POST", body: formData });
+    } catch {
+      setParseError({ code: "UNKNOWN", message: "" });
+      setStage(null);
+      return;
+    }
+
+    // Validation errors come back as plain JSON (non-SSE)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+      setParseError({ code: "VALIDATION", message: (data["error"] as string) ?? "" });
+      setStage(null);
+      return;
+    }
+
+    // Read SSE stream
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
 
-      const res = await fetch("/api/resume", { method: "POST", body: formData });
-      const data = (await res.json()) as Record<string, unknown>;
+        // Split on double newline to get complete SSE messages
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
 
-      if (!res.ok) {
-        throw new Error((data["error"] as string) ?? t("parseError"));
+        for (const part of parts) {
+          const eventMatch = part.match(/^event: (\w+)/m);
+          const dataMatch = part.match(/^data: (.+)/m);
+          if (!dataMatch) continue;
+
+          let payload: Record<string, unknown>;
+          try {
+            payload = JSON.parse(dataMatch[1]);
+          } catch {
+            continue;
+          }
+
+          const eventName = eventMatch?.[1];
+
+          if (eventName === "progress") {
+            setStage(payload["stage"] as ParseStage);
+          } else if (eventName === "result") {
+            setStage(null);
+            onParsed(payload);
+            return;
+          } else if (eventName === "error") {
+            setParseError({
+              code: (payload["code"] as string) ?? "UNKNOWN",
+              message: (payload["message"] as string) ?? "",
+            });
+            setStage(null);
+          } else if (eventName === "done") {
+            setStage(null);
+            return;
+          }
+        }
       }
-
-      onParsed(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("genericError"));
+    } catch {
+      setParseError({ code: "UNKNOWN", message: "" });
     } finally {
-      setIsLoading(false);
+      setStage(null);
     }
   }
 
@@ -73,7 +150,15 @@ export default function ResumeUpload({ onParsed }: Props) {
         {isLoading ? (
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-gray-600">{t("analyzing", { fileName: fileName ?? "" })}</p>
+            <p className="text-sm text-gray-600">
+              {stage === "extracting" && t("stageExtracting", { fileName: fileName ?? "" })}
+              {stage === "parsing" && t("stageParsing")}
+            </p>
+            {/* Two-dot stage progress indicator */}
+            <div className="flex gap-2 mt-1">
+              <div className={`w-2 h-2 rounded-full transition-colors ${stage === "extracting" ? "bg-blue-500" : "bg-blue-200"}`} />
+              <div className={`w-2 h-2 rounded-full transition-colors ${stage === "parsing" ? "bg-blue-500" : "bg-gray-200"}`} />
+            </div>
           </div>
         ) : fileName ? (
           <div className="flex flex-col items-center gap-2">
@@ -90,9 +175,17 @@ export default function ResumeUpload({ onParsed }: Props) {
         )}
       </div>
 
-      {error && (
+      {parseError && (
         <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-          {error}
+          <p>{getErrorMessage(parseError, t)}</p>
+          {lastFile && (
+            <button
+              className="mt-2 text-xs font-medium text-blue-600 hover:underline"
+              onClick={(e) => { e.stopPropagation(); handleFile(lastFile); }}
+            >
+              {t("retryButton")}
+            </button>
+          )}
         </div>
       )}
     </div>

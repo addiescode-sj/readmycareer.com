@@ -47,12 +47,18 @@ importers:
       '@readmycareer/agents':
         specifier: workspace:*
         version: link:../agents
+      mammoth:
+        specifier: ^1.8.0
+        version: 1.12.0
       next:
         specifier: 14.2.0
         version: 14.2.0(@opentelemetry/api@1.9.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       next-intl:
         specifier: ^4.9.1
         version: 4.9.1(next@14.2.0(@opentelemetry/api@1.9.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+      pdf-parse:
+        specifier: ^1.1.1
+        version: 1.1.4
       react:
         specifier: ^18
         version: 18.3.1
@@ -72,6 +78,9 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.39
+      '@types/pdf-parse':
+        specifier: ^1.1.4
+        version: 1.1.5
       '@types/react':
         specifier: ^18
         version: 18.3.28

@@ -16,7 +16,15 @@
     "replacePrompt": "Click to replace with a different file",
     "analyzing": "Analyzing resume... ({fileName})",
     "parseError": "Parse failed",
-    "genericError": "An error occurred."
+    "genericError": "An error occurred.",
+    "stageExtracting": "Extracting text... ({fileName})",
+    "stageParsing": "AI is analyzing your resume. This may take up to a minute.",
+    "retryButton": "Try again",
+    "errorScannedPdf": "Scanned image PDFs are not supported. Please upload a text-based PDF or Word file.",
+    "errorExtractFailed": "Could not extract text from the file. Please check that it is a valid PDF or DOCX.",
+    "errorTimeout": "Resume analysis timed out. Please try again in a moment.",
+    "errorQuota": "Daily AI service quota exceeded. Please try again tomorrow.",
+    "errorParseFailed": "Could not recognize the resume structure. Please check the file and try again."
   },
   "GoalSetting": {
     "title": "Set Your Goal",

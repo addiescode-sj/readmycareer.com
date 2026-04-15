@@ -16,7 +16,15 @@
     "replacePrompt": "다른 파일로 교체하려면 클릭하세요",
     "analyzing": "이력서 분석 중... ({fileName})",
     "parseError": "파싱 실패",
-    "genericError": "오류가 발생했습니다."
+    "genericError": "오류가 발생했습니다.",
+    "stageExtracting": "텍스트 추출 중... ({fileName})",
+    "stageParsing": "AI가 이력서를 분석하고 있습니다. 잠시만 기다려 주세요.",
+    "retryButton": "다시 시도",
+    "errorScannedPdf": "스캔된 이미지 PDF는 지원하지 않습니다. 텍스트가 포함된 PDF 또는 Word 파일을 업로드해 주세요.",
+    "errorExtractFailed": "파일에서 텍스트를 추출하지 못했습니다. PDF 또는 DOCX 파일인지 확인해 주세요.",
+    "errorTimeout": "이력서 분석 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
+    "errorQuota": "AI 서비스 일일 사용량이 초과되었습니다. 내일 다시 시도해 주세요.",
+    "errorParseFailed": "이력서 구조를 인식하지 못했습니다. 파일을 확인한 후 다시 시도해 주세요."
   },
   "GoalSetting": {
     "title": "목표 설정",
