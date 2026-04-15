@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pnpm --filter @readmycareer/agents build && pnpm --filter app build",
-  "outputDirectory": "app/.next",
-  "installCommand": "pnpm install"
+  "buildCommand": "cd .. && pnpm --filter @readmycareer/agents build && pnpm --filter app build",
+  "outputDirectory": ".next",
+  "installCommand": "cd .. && pnpm install"
 }
