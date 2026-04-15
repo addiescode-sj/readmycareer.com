@@ -1,0 +1,25 @@
+{
+  "name": "@readmycareer/mcp-pdf-word-to-json",
+  "version": "0.1.0",
+  "description": "MCP skill for parsing PDF/Word resumes into structured JSON",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pdf-parse": "^1.1.4",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

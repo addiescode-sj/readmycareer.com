@@ -1,0 +1,24 @@
+{
+  "name": "@readmycareer/mcp-career-knowledge-base",
+  "version": "0.1.0",
+  "description": "MCP skill for searching JD/Career reference documents integrated with RAG Vector DB",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@google/generative-ai": "^0.21.0",
+    "@pinecone-database/pinecone": "^5.0.0",
+    "googleapis": "^144.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
