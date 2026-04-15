@@ -1,0 +1,12 @@
+{
+  "extends": "../mcp-skills/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "paths": {
+      "@readmycareer/mcp-skills/*": ["../mcp-skills/*/src/index.ts"]
+    }
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
