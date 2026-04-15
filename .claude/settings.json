@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(git -C /Users/addie.lee/work/readmycareer.com log --oneline --all -- \".env\" \"app/.env\")",
+      "Bash(pnpm add *)",
+      "Bash(pnpm --filter @readmycareer/app add next-intl)",
+      "Bash(ls -la /Users/addie.lee/work/readmycareer.com/*.*)",
+      "Bash(git -C /Users/addie.lee/work/readmycareer.com status --short)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  },
+  "enabledPlugins": {
+    "pinecone@claude-plugins-official": true
+  }
+}
