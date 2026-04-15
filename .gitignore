@@ -41,6 +41,8 @@ build/Release
 node_modules/
 jspm_packages/
 
+
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
@@ -137,3 +139,10 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Documentation
+chat-documentation/
+prd-documentation/user-stories-KR.md
+
+# Secrets
+readmycareer-c547f96903fa.json
