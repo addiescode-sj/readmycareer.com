@@ -3,27 +3,29 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { resolve } from "path";
 import { z } from "zod";
-import { searchJdFromGoogle } from "@/lib/externalJdSearch";
 
 const AnalyzeSchema = z.object({
   resumeJson: z.record(z.unknown()),
   targetRole: z.string().min(1).max(200),
   targetCompany: z.string().max(200).default(""),
+  jdText: z.string().min(50).max(10000),
   durationWeeks: z.number().int().min(1).max(52),
   startDate: z.string().min(1).max(30),
 });
 
-const MAX_BODY_BYTES = 500_000; // 500 KB
-
-/** Minimum score cutoff for Vector DB — falls back to Google Search if below this threshold */
-const VECTOR_SCORE_THRESHOLD = 0.35;
+const MAX_BODY_BYTES = 500_000; // 500 KB — covers resumeJson + jdText + metadata
 
 const KB_SKILL_PATH = resolve(
   process.cwd(),
   "../mcp-skills/career-knowledge-base/dist/index.js"
 );
 
-async function searchJdFromMcp(query: string) {
+// Searches the career knowledge base MCP.
+// Default filter is "jd"; pass { doc_type: "reference" } for career trend/industry documents.
+async function searchJdFromMcp(
+  query: string,
+  filter: { doc_type: "jd" | "reference" } = { doc_type: "jd" }
+) {
   // Pass only the env vars required by the career-knowledge-base MCP
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "",
@@ -45,7 +47,7 @@ async function searchJdFromMcp(query: string) {
 
   const result = await client.callTool({
     name: "search",
-    arguments: { query, top_k: 5, filter: { doc_type: "jd" } },
+    arguments: { query, top_k: 5, filter },
   });
 
   await client.close();
@@ -89,7 +91,7 @@ export async function POST(req: NextRequest) {
   const contentLength = Number(req.headers.get("content-length") ?? 0);
   if (contentLength > MAX_BODY_BYTES) {
     return new Response(
-      JSON.stringify({ error: "요청 데이터가 너무 큽니다." }),
+      JSON.stringify({ error: "Request payload too large." }),
       { status: 413, headers: { "Content-Type": "application/json" } }
     );
   }
@@ -100,12 +102,12 @@ export async function POST(req: NextRequest) {
     body = AnalyzeSchema.parse(raw);
   } catch {
     return new Response(
-      JSON.stringify({ error: "입력값이 올바르지 않습니다." }),
+      JSON.stringify({ error: "Invalid input." }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  const { resumeJson, targetRole, targetCompany, durationWeeks, startDate } = body;
+  const { resumeJson, targetRole, targetCompany, jdText, durationWeeks, startDate } = body;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -113,57 +115,34 @@ export async function POST(req: NextRequest) {
         controller.enqueue(sseChunk(event, data));
 
       try {
-        // 1. JD hybrid search: ① Vector DB → ② (0 hits or low score) Google Search fallback
-        send("progress", { step: "jd_search", message: "벡터DB에서 관련 JD 검색 중..." });
-        let jdResults: any[] = [];
-        let jdSource: "vector_db" | "google_search" | "vector_db+google_search" = "vector_db";
+        // 1. Fetch career trend reference documents from Vector DB (supplementary context for planner).
+        //    JD gap analysis now uses the raw jdText provided directly by the user.
+        send("progress", { step: "reference_search", message: "Fetching career trend reference documents..." });
+        let referenceResults: any[] = [];
 
         try {
-          jdResults = await searchJdFromMcp(
-            `${targetRole} ${targetCompany}`.trim()
+          referenceResults = await searchJdFromMcp(
+            `${targetRole} ${targetCompany}`.trim(),
+            { doc_type: "reference" }
           );
         } catch (mcpErr: any) {
-          console.warn("[/api/analyze] Vector DB 검색 실패 — 폴백으로 진행:", mcpErr?.message ?? mcpErr);
-          jdResults = [];
-        }
-
-        const topScore = jdResults.reduce(
-          (max: number, r: any) => Math.max(max, Number(r?.score ?? 0)),
-          0
-        );
-        const needsFallback = jdResults.length === 0 || topScore < VECTOR_SCORE_THRESHOLD;
-
-        if (needsFallback) {
-          send("progress", {
-            step: "jd_fallback",
-            message:
-              jdResults.length === 0
-                ? "벡터DB에 관련 JD 없음 — Google 웹 검색으로 폴백..."
-                : `벡터DB 최고 점수 ${topScore.toFixed(2)} < ${VECTOR_SCORE_THRESHOLD} — Google 웹 검색으로 보강...`,
-          });
-
-          const externalResults = await searchJdFromGoogle(targetRole, targetCompany);
-
-          if (externalResults.length > 0) {
-            jdResults = [...jdResults, ...externalResults];
-            jdSource = jdResults.length > externalResults.length
-              ? "vector_db+google_search"
-              : "google_search";
-          }
+          console.warn("[/api/analyze] Reference search failed — proceeding without supplementary context:", mcpErr?.message ?? mcpErr);
+          referenceResults = [];
         }
 
         send("progress", {
-          step: "jd_search_done",
-          message: `JD ${jdResults.length}건 확보 (source: ${jdSource})`,
+          step: "reference_search_done",
+          message: `Reference documents retrieved: ${referenceResults.length}`,
         });
 
-        // 2. Run agent pipeline
+        // 2. Run agent pipeline (gap analysis uses jdText directly; planner uses referenceResults)
         const { runCareerAnalysis } = await import(
           "@readmycareer/agents/orchestrator"
         ) as {
           runCareerAnalysis: (
             resumeJson: unknown,
-            jdResults: unknown[],
+            jdText: string,
+            referenceResults: unknown[],
             durationWeeks: number,
             startDate: string,
             targetRole: string,
@@ -174,7 +153,8 @@ export async function POST(req: NextRequest) {
 
         const careerPlan = await runCareerAnalysis(
           resumeJson,
-          jdResults,
+          jdText,
+          referenceResults,
           durationWeeks,
           startDate,
           targetRole,
@@ -187,7 +167,7 @@ export async function POST(req: NextRequest) {
         send("result", careerPlan);
       } catch (err: unknown) {
         console.error("[/api/analyze]", err);
-        send("error", { message: "분석 중 오류가 발생했습니다." });
+        send("error", { message: "An error occurred during analysis." });
       } finally {
         send("done", {});
         controller.close();

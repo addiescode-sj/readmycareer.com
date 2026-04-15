@@ -65,7 +65,7 @@ async function getOrCreateResumeCache(
   const cached = cacheRegistry.get(key);
 
   if (cached && cached.expiresAt > now) {
-    console.log("[CACHE] 이력서 캐시 HIT →", cached.cacheName);
+    console.log("[CACHE] Resume cache HIT →", cached.cacheName);
     return cached.cacheName;
   }
 
@@ -78,13 +78,13 @@ async function getOrCreateResumeCache(
           role: "user",
           parts: [
             {
-              text: `[이력서 데이터 — 이 내용을 분석에 활용하세요]\n${JSON.stringify(resumeJson, null, 2)}`,
+              text: `[Resume data — use this for analysis]\n${JSON.stringify(resumeJson, null, 2)}`,
             },
           ],
         },
         {
           role: "model",
-          parts: [{ text: "이력서 데이터를 확인했습니다. 분석을 시작할 준비가 되었습니다." }],
+          parts: [{ text: "Resume data confirmed. Ready to begin analysis." }],
         },
       ],
       systemInstruction: systemInstruction,
@@ -97,11 +97,11 @@ async function getOrCreateResumeCache(
       expiresAt: now + (CACHE_TTL_SECONDS - 60) * 1000, // 60-second buffer
     });
 
-    console.log("[CACHE] 이력서 캐시 생성 완료 →", cache.name);
+    console.log("[CACHE] Resume cache created →", cache.name);
     return cache.name || null;
   } catch (err: any) {
     if (CACHE_FALLBACK_ON_ERROR) {
-      console.warn("[CACHE] 캐시 생성 실패 (캐싱 없이 진행):", err?.message ?? err);
+      console.warn("[CACHE] Cache creation failed (proceeding without cache):", err?.message ?? err);
       return null;
     }
     throw err;
@@ -163,7 +163,7 @@ async function callGemini(opts: CallGeminiOptions): Promise<string | null> {
       const usage = result.response.usageMetadata;
       if (usage) {
         console.log(
-          `[GEMINI] 토큰 사용: 입력=${usage.promptTokenCount}, 출력=${usage.candidatesTokenCount}, 캐시=${usage.cachedContentTokenCount ?? 0}`
+          `[GEMINI] Token usage: input=${usage.promptTokenCount}, output=${usage.candidatesTokenCount}, cache=${usage.cachedContentTokenCount ?? 0}`
         );
       }
       return text;
@@ -174,13 +174,13 @@ async function callGemini(opts: CallGeminiOptions): Promise<string | null> {
       if (isRetryable && attempt < MAX_API_RETRIES - 1) {
         const delay = exponentialDelay(attempt);
         console.warn(
-          `[GEMINI] HTTP ${status} — ${Math.round(delay / 1000)}s 후 재시도 (${attempt + 1}/${MAX_API_RETRIES - 1})`
+          `[GEMINI] HTTP ${status} — retrying in ${Math.round(delay / 1000)}s (${attempt + 1}/${MAX_API_RETRIES - 1})`
         );
         await new Promise((r) => setTimeout(r, delay));
         continue;
       }
 
-      console.error("[GEMINI] 호출 실패:", err?.message ?? err);
+      console.error("[GEMINI] Call failed:", err?.message ?? err);
       return null;
     }
   }
@@ -194,38 +194,38 @@ async function callGemini(opts: CallGeminiOptions): Promise<string | null> {
 function validateGapAnalysis(data: unknown): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   if (!data || typeof data !== "object") {
-    return { valid: false, errors: ["응답이 JSON 객체가 아닙니다"] };
+    return { valid: false, errors: ["Response is not a JSON object"] };
   }
   const d = data as Record<string, unknown>;
 
-  if (!d.target_role || typeof d.target_role !== "string") errors.push("target_role(string) 누락");
-  if (!Array.isArray(d.strengths)) errors.push("strengths(array) 누락");
-  if (!Array.isArray(d.gaps) || d.gaps.length === 0) errors.push("gaps(array) 비어있음");
-  if (!Array.isArray(d.priority_order)) errors.push("priority_order(array) 누락");
+  if (!d.target_role || typeof d.target_role !== "string") errors.push("target_role(string) missing");
+  if (!Array.isArray(d.strengths)) errors.push("strengths(array) missing");
+  if (!Array.isArray(d.gaps) || d.gaps.length === 0) errors.push("gaps(array) empty or missing");
+  if (!Array.isArray(d.priority_order)) errors.push("priority_order(array) missing");
   if (
     typeof d.overall_match_score !== "number" ||
     d.overall_match_score < 0 ||
     d.overall_match_score > 100
   ) {
-    errors.push("overall_match_score는 0~100 사이 숫자여야 합니다");
+    errors.push("overall_match_score must be a number between 0 and 100");
   }
-  if (!d.summary || typeof d.summary !== "string") errors.push("summary(string) 누락");
+  if (!d.summary || typeof d.summary !== "string") errors.push("summary(string) missing");
 
   // Check structure of each gap item
   if (Array.isArray(d.gaps)) {
     const VALID_CATEGORIES = new Set(["skill", "experience", "certification", "portfolio", "keyword"]);
     const VALID_PRIORITIES = new Set(["high", "medium", "low"]);
     for (const [i, gap] of (d.gaps as any[]).entries()) {
-      if (!gap?.id) errors.push(`gaps[${i}].id 누락`);
+      if (!gap?.id) errors.push(`gaps[${i}].id missing`);
 
       const cat = (gap?.category || "").toLowerCase();
       const hasValidCat = [...VALID_CATEGORIES].some(v => cat.includes(v));
-      if (!hasValidCat) errors.push(`gaps[${i}].category 유효하지 않음: ${gap?.category}`);
+      if (!hasValidCat) errors.push(`gaps[${i}].category invalid: ${gap?.category}`);
 
       const prio = (gap?.priority || "").toLowerCase();
-      if (!VALID_PRIORITIES.has(prio)) errors.push(`gaps[${i}].priority 유효하지 않음: ${gap?.priority}`);
+      if (!VALID_PRIORITIES.has(prio)) errors.push(`gaps[${i}].priority invalid: ${gap?.priority}`);
 
-      if (!gap?.rationale) errors.push(`gaps[${i}].rationale 누락`);
+      if (!gap?.rationale) errors.push(`gaps[${i}].rationale missing`);
     }
   }
 
@@ -238,7 +238,7 @@ function validateCareerPlan(
 ): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   if (!data || typeof data !== "object") {
-    return { valid: false, errors: ["응답이 JSON 객체가 아닙니다"] };
+    return { valid: false, errors: ["Response is not a JSON object"] };
   }
 
   // Orchestrator return structure: { ...normalizedPlan, career_plan, gap_analysis }
@@ -246,13 +246,13 @@ function validateCareerPlan(
   const raw = (d.career_plan ?? d) as Record<string, unknown>;
   const weeks = (raw.weeks ?? raw.weekly_schedule ?? []) as any[];
 
-  if (!raw.summary) errors.push("summary 누락");
+  if (!raw.summary) errors.push("summary missing");
   if (weeks.length === 0) {
-    errors.push("weeks 배열이 비어있습니다");
+    errors.push("weeks array is empty");
     return { valid: false, errors };
   }
   if (weeks.length < Math.ceil(expectedWeeks * 0.8)) {
-    errors.push(`weeks 수 부족: ${weeks.length}개 (최소 ${Math.ceil(expectedWeeks * 0.8)}개 필요)`);
+    errors.push(`weeks count insufficient: ${weeks.length} (minimum ${Math.ceil(expectedWeeks * 0.8)} required)`);
   }
 
   // Plan Completeness: todos ≥ MIN_TODOS_PER_WEEK (as defined in harness-eval.md)
@@ -260,18 +260,18 @@ function validateCareerPlan(
     const todos: unknown[] = w?.todos ?? [];
     if (todos.length < QUALITY_THRESHOLDS.MIN_TODOS_PER_WEEK) {
       errors.push(
-        `week ${i + 1} todos 부족: ${todos.length}개 (최소 ${QUALITY_THRESHOLDS.MIN_TODOS_PER_WEEK}개)`
+        `week ${i + 1} todos insufficient: ${todos.length} (minimum ${QUALITY_THRESHOLDS.MIN_TODOS_PER_WEEK})`
       );
     }
 
     // Date Consistency: check date_range format and order
     if (!w?.date_range?.start || !w?.date_range?.end) {
-      errors.push(`week ${i + 1} date_range 누락`);
+      errors.push(`week ${i + 1} date_range missing`);
     } else {
       const start = Date.parse(w.date_range.start);
       const end = Date.parse(w.date_range.end);
       if (isNaN(start) || isNaN(end)) {
-        errors.push(`week ${i + 1} date_range 날짜 형식 오류`);
+        errors.push(`week ${i + 1} date_range format invalid`);
       } else if (end < start) {
         errors.push(`week ${i + 1} end(${w.date_range.end}) < start(${w.date_range.start})`);
       } else if (i > 0) {
@@ -279,7 +279,7 @@ function validateCareerPlan(
         const gapDays = (start - prevEnd) / 86_400_000;
         if (gapDays > QUALITY_THRESHOLDS.DATE_GAP_TOLERANCE_DAYS) {
           errors.push(
-            `week ${i} → week ${i + 1} 날짜 불연속 (${Math.round(gapDays)}일 공백)`
+            `week ${i} → week ${i + 1} date discontinuity (${Math.round(gapDays)}-day gap)`
           );
         }
       }
@@ -303,20 +303,20 @@ async function runWithQualityGate<T>(
   for (let attempt = 0; attempt <= MAX_QUALITY_RETRIES; attempt++) {
     if (attempt > 0) {
       const waitTime = 5000;
-      console.log(`[QUALITY GATE][${label}] 할당량 회복을 위해 ${waitTime / 1000}초 대기 후 시도 ${attempt + 1} 시작...`);
+      console.log(`[QUALITY GATE][${label}] Waiting ${waitTime / 1000}s before attempt ${attempt + 1}...`);
       await new Promise(r => setTimeout(r, waitTime));
     }
 
     const retryFeedback =
       attempt === 0
         ? ""
-        : `\n\n⚠️ 품질 검증 실패 (이전 시도 오류):\n${lastErrors.map((e) => `- ${e}`).join("\n")}\n참고: "category"는 반드시 {skill, experience, certification, portfolio, keyword} 중 하나여야 하며, "priority"는 반드시 {high, medium, low} 소문자로 출력하세요.`;
+        : `\n\n⚠️ Quality validation failed (errors from previous attempt):\n${lastErrors.map((e) => `- ${e}`).join("\n")}\nNote: "category" must be one of {skill, experience, certification, portfolio, keyword}, and "priority" must be one of {high, medium, low} in lowercase.`;
 
     const text = await callFn(retryFeedback);
 
     if (!text) {
-      lastErrors = ["LLM 응답 없음 (API 오류)"];
-      console.warn(`[QUALITY GATE][${label}] 시도 ${attempt + 1}: 응답 없음`);
+      lastErrors = ["No LLM response (API error)"];
+      console.warn(`[QUALITY GATE][${label}] Attempt ${attempt + 1}: no response`);
       continue;
     }
 
@@ -327,8 +327,8 @@ async function runWithQualityGate<T>(
       const cleaned = text.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim();
       parsed = JSON.parse(cleaned);
     } catch (e: any) {
-      lastErrors = [`JSON 파싱 실패: ${e.message}`, `응답 미리보기: ${text.slice(0, 200)}`];
-      console.warn(`[QUALITY GATE][${label}] 시도 ${attempt + 1}: JSON 파싱 오류`);
+      lastErrors = [`JSON parse failed: ${e.message}`, `Response preview: ${text.slice(0, 200)}`];
+      console.warn(`[QUALITY GATE][${label}] Attempt ${attempt + 1}: JSON parse error`);
       continue;
     }
 
@@ -336,17 +336,17 @@ async function runWithQualityGate<T>(
     const { valid, errors } = validateFn(parsed);
     if (valid) {
       if (attempt > 0) {
-        console.log(`[QUALITY GATE][${label}] ${attempt + 1}회 시도 만에 품질 기준 통과`);
+        console.log(`[QUALITY GATE][${label}] Passed quality check on attempt ${attempt + 1}`);
       }
       return parsed as T;
     }
 
     lastErrors = errors;
-    console.warn(`[QUALITY GATE][${label}] 시도 ${attempt + 1}/${MAX_QUALITY_RETRIES + 1} 실패:`, errors);
+    console.warn(`[QUALITY GATE][${label}] Attempt ${attempt + 1}/${MAX_QUALITY_RETRIES + 1} failed:`, errors);
   }
 
   throw new Error(
-    `[QUALITY GATE][${label}] ${MAX_QUALITY_RETRIES + 1}회 시도 후 품질 기준 미달.\n마지막 오류: ${lastErrors.join(" | ")}`
+    `[QUALITY GATE][${label}] Quality criteria not met after ${MAX_QUALITY_RETRIES + 1} attempts.\nLast errors: ${lastErrors.join(" | ")}`
   );
 }
 
@@ -368,18 +368,18 @@ function normalizePlan(
     summary:
       deepPlan.summary ||
       deepPlan.plan_overview?.primary_objective ||
-      "커리어 성장을 위한 주차별 플랜입니다.",
+      "Weekly career growth plan.",
     start_date: careerPlanData.start_date || startDate,
     duration_weeks: careerPlanData.duration_weeks || durationWeeks,
     weeks: rawWeeks.map((w: any, idx: number) => ({
       week_number: w.week_number || w.week || idx + 1,
       date_range: w.date_range || { start: startDate, end: startDate },
-      theme: w.theme || "학습 및 준비",
+      theme: w.theme || "Learning & Preparation",
       milestone: w.milestone || deepPlan.timeline_milestones?.[idx]?.milestone || null,
       todos: (w.todos || w.action_items || w.learning_objectives || []).map(
         (t: any, tIdx: number) => ({
           id: t.id || `todo_${idx + 1}_${tIdx}`,
-          title: typeof t === "string" ? t : t.title || t.item || "태스크",
+          title: typeof t === "string" ? t : t.title || t.item || "Task",
           description: t.description || null,
           category: t.category || "skill",
           priority: t.priority || "medium",
@@ -409,14 +409,16 @@ function normalizePlan(
 }
 
 // ── runCareerAnalysis ─────────────────────────────────────────────────────────
-// Resume + JD → gap analysis + career plan
+// Resume + raw JD text → gap analysis + career plan
 // - Re-analysis of the same resume reduces input tokens via context caching.
 // - Each stage output is automatically retried if it fails quality criteria.
+// - Career trend reference documents from Vector DB supplement the planning step.
 // - Progress is forwarded via the onProgress callback for SSE streaming.
 
 export async function runCareerAnalysis(
   resumeJson: ResumeJson,
-  jdResults: JdSearchResult[],
+  jdText: string,
+  referenceResults: JdSearchResult[],
   durationWeeks: number,
   startDate: string,
   targetRole: string,
@@ -424,43 +426,42 @@ export async function runCareerAnalysis(
   onProgress?: (step: string, detail?: string) => void
 ): Promise<CareerPlanOutput & { gap_analysis: any }> {
   const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GOOGLE_API_KEY 또는 GEMINI_API_KEY가 설정되지 않았습니다.");
+  if (!apiKey) throw new Error("GOOGLE_API_KEY or GEMINI_API_KEY is not set.");
 
   // ── Step 0: Prepare resume cache ─────────────────────────────────────────
   // Strip personal contact info — not needed for analysis, reduces token usage.
   const resumeForAnalysis = omitPersonal(resumeJson);
-  onProgress?.("cache", "이력서 컨텍스트 캐시 확인 중...");
+  onProgress?.("cache", "Checking resume context cache...");
   const gapCacheName = await getOrCreateResumeCache(apiKey, GAP_ANALYZER_INSTRUCTION, resumeForAnalysis);
 
   // ── Step 1: Gap analysis (with quality gate) ─────────────────────────────
-  onProgress?.("gap_analysis", "이력서 ↔ JD 갭 분석 중...");
-  console.log("[ORCHESTRATOR] Step 1: Gap Analysis 시작...");
+  // Uses the user-provided raw JD text directly for precise gap identification.
+  onProgress?.("gap_analysis", "Analyzing resume ↔ JD gaps...");
+  console.log("[ORCHESTRATOR] Step 1: Gap Analysis started...");
 
   const gapAnalysisData = await runWithQualityGate<any>(
     (retryFeedback) => {
       const prompt = `
-아래 목표 기업/직무와 JD 검색 결과, 이력서(캐시에 포함됨)를 비교하여 갭 분석을 수행하세요.
-JSON만 출력하세요.
+Analyze the gap between the target company/role, the job description below, and the resume (included in cache).
+Output JSON only.
 
-## 사용자가 지정한 목표 (절대 변경 금지)
+## User-Specified Target (do NOT change)
 - target_company: ${targetCompany}
 - target_role: ${targetRole}
 
-⚠️ 출력 JSON의 "target_role" 필드는 반드시 위 "${targetRole}" 값을 사용하세요.
-⚠️ 갭 분석/강점/약점은 모두 위 목표 기업·직무 맥락에서 판단하세요.
-⚠️ 아래 JD 검색 결과가 비어있거나 목표와 무관해 보이더라도, target_role을 임의로 변경하지 마세요.
-   대신 일반적으로 알려진 "${targetCompany} ${targetRole}"의 직무 요구사항을 바탕으로 분석하세요.
+⚠️ The "target_role" field in the output JSON MUST use the value "${targetRole}" above.
+⚠️ All gap analysis, strengths, and weaknesses must be evaluated in the context of the above target company/role.
 
-## 필수 필드:
-"target_role"(string), "strengths"(array), "gaps"(array, 반드시 1개 이상),
-"priority_order"(array), "overall_match_score"(0~100 number), "summary"(string)
+## Required fields:
+"target_role"(string), "strengths"(array), "gaps"(array, at least 1 required),
+"priority_order"(array), "overall_match_score"(0-100 number), "summary"(string)
 
-## 유효한 값 제약:
-- category: 반드시 {"skill", "experience", "certification", "portfolio", "keyword"} 중 하나여야 함.
-- priority: 반드시 {"high", "medium", "low"} 소문자여야 함.
+## Valid value constraints:
+- category: MUST be one of {"skill", "experience", "certification", "portfolio", "keyword"}
+- priority: MUST be one of {"high", "medium", "low"} in lowercase
 
-## JD 검색 결과 (${jdResults.length}건):
-${jdResults.length > 0 ? JSON.stringify(jdResults, null, 2) : "(검색 결과 없음 — 목표 기업·직무에 대한 일반적 지식을 활용하세요)"}
+## Job Description:
+${jdText}
 ${retryFeedback}
 `.trim();
 
@@ -477,12 +478,13 @@ ${retryFeedback}
   );
 
   console.log(
-    `[ORCHESTRATOR] Step 1 완료 — match_score=${gapAnalysisData.overall_match_score}, gaps=${gapAnalysisData.gaps?.length}`
+    `[ORCHESTRATOR] Step 1 complete — match_score=${gapAnalysisData.overall_match_score}, gaps=${gapAnalysisData.gaps?.length}`
   );
 
   // ── Step 2: Career plan generation (with quality gate) ───────────────────
-  onProgress?.("planning", `${durationWeeks}주 커리어 플랜 생성 중...`);
-  console.log("[ORCHESTRATOR] Step 2: Career Planning 시작...");
+  // Uses gap analysis results + career trend reference documents from Vector DB.
+  onProgress?.("planning", `Generating ${durationWeeks}-week career plan...`);
+  console.log("[ORCHESTRATOR] Step 2: Career Planning started...");
 
   // Reuse resume cache for plan generation (maximize savings for same resume + different goal)
   const planCacheName = await getOrCreateResumeCache(apiKey, PLANNER_INSTRUCTION, resumeForAnalysis);
@@ -490,25 +492,25 @@ ${retryFeedback}
   const careerPlanData = await runWithQualityGate<any>(
     (retryFeedback) => {
       const prompt = `
-아래 목표 기업/직무 및 갭 분석 결과를 바탕으로 ${durationWeeks}주 커리어 플랜을 JSON만 출력하세요.
+Based on the target company/role, gap analysis, and career trend context below, output a ${durationWeeks}-week career plan as JSON only.
 
-## 사용자가 지정한 목표 (절대 변경 금지)
+## User-Specified Target (do NOT change)
 - target_company: ${targetCompany}
 - target_role: ${targetRole}
 
-⚠️ 모든 주차별 학습/태스크는 "${targetCompany} ${targetRole}" 지원 준비 맥락에서 설계하세요.
+⚠️ All weekly learning tasks must be designed in the context of preparing for "${targetCompany} ${targetRole}".
 
-## 필수 구조:
+## Required structure:
 {
-  "summary": "플랜 요약",
+  "summary": "plan summary",
   "weeks": [
     {
       "week_number": 1,
       "date_range": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" },
-      "theme": "주차 주제",
-      "milestone": "마일스톤 또는 null",
+      "theme": "weekly theme",
+      "milestone": "milestone or null",
       "todos": [
-        { "id": "t1", "title": "할일", "description": "설명", "category": "skill",
+        { "id": "t1", "title": "task", "description": "description", "category": "skill",
           "priority": "high", "estimated_hours": 2, "done": false, "resources": [] }
       ]
     }
@@ -516,13 +518,20 @@ ${retryFeedback}
   "timeline": { "milestones": [], "gantt_rows": [] }
 }
 
-⚠️ 매 주차 todos는 최소 ${QUALITY_THRESHOLDS.MIN_TODOS_PER_WEEK}개 이상이어야 합니다.
-⚠️ date_range는 YYYY-MM-DD 형식이며 주차 간 날짜가 연속되어야 합니다.
+⚠️ Each week MUST have at least ${QUALITY_THRESHOLDS.MIN_TODOS_PER_WEEK} todos.
+⚠️ date_range must be in YYYY-MM-DD format and dates must be consecutive across weeks.
 
-## 갭 분석 결과:
+## Gap Analysis Results:
 ${JSON.stringify(gapAnalysisData, null, 2)}
 
-시작일: ${startDate} / 기간: ${durationWeeks}주
+## Industry & Career Trend Context (supplementary reference):
+${
+  referenceResults.length > 0
+    ? JSON.stringify(referenceResults, null, 2)
+    : "(No reference data available — rely on general knowledge for career trends)"
+}
+
+Start date: ${startDate} / Duration: ${durationWeeks} weeks
 ${retryFeedback}
 `.trim();
 
@@ -539,10 +548,10 @@ ${retryFeedback}
   );
 
   console.log(
-    `[ORCHESTRATOR] Step 2 완료 — weeks=${careerPlanData.weeks?.length ?? careerPlanData.career_plan?.weeks?.length}`
+    `[ORCHESTRATOR] Step 2 complete — weeks=${careerPlanData.weeks?.length ?? careerPlanData.career_plan?.weeks?.length}`
   );
 
-  onProgress?.("done", "분석 완료");
+  onProgress?.("done", "Analysis complete");
 
   return normalizePlan(careerPlanData, gapAnalysisData, durationWeeks, startDate);
 }

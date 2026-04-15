@@ -4,7 +4,7 @@
 // ── Session State Keys ────────────────────────────────────────────────────────
 export const SESSION_KEYS = {
   RESUME_JSON: "resume_json",
-  JD_SEARCH_RESULTS: "jd_search_results",
+  JD_TEXT: "jd_text",
   GAP_ANALYSIS: "gap_analysis",
   CAREER_PLAN: "career_plan",
   CHAT_HISTORY: "chat_history",
@@ -22,7 +22,7 @@ export function omitPersonal(resume: ResumeJson): ResumeJsonForAnalysis {
 // ── GapAnalyzerAgent I/O ──────────────────────────────────────────────────────
 export interface GapAnalysisInput {
   resume_json: ResumeJsonForAnalysis;
-  jd_search_results: JdSearchResult[];
+  jd_text: string;
 }
 
 export interface GapAnalysisOutput {

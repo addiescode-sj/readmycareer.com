@@ -48,7 +48,7 @@ const getSessionContextTool = new FunctionTool({
           SESSION_KEYS.RESUME_JSON,
           SESSION_KEYS.GAP_ANALYSIS,
           SESSION_KEYS.CAREER_PLAN,
-          SESSION_KEYS.JD_SEARCH_RESULTS,
+          SESSION_KEYS.JD_TEXT,
         ])
       )
       .describe("가져올 세션 키 목록"),

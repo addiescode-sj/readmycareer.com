@@ -11,7 +11,11 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(pnpm install *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(grep -E \"\\\\.\\(ts|yaml\\)$\")",
+      "Bash(/Users/addie.lee/work/readmycareer.com/agents/node_modules/.bin/tsc --noEmit)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(/Users/addie.lee/work/readmycareer.com/app/node_modules/.bin/tsc --noEmit)"
     ],
     "additionalDirectories": [
       "/tmp"

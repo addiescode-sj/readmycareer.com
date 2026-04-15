@@ -33,6 +33,11 @@
     "required": "*",
     "targetCompanyLabel": "목표 기업",
     "optional": "(선택)",
+    "jdTextLabel": "채용 공고 (JD)",
+    "jdTextHint": "지원하려는 채용 공고의 전체 텍스트를 붙여넣기 하세요.",
+    "jdTextPlaceholder": "채용 공고 전문을 여기에 붙여넣기 하세요...",
+    "jdTextValidationError": "채용 공고를 입력해주세요 (최소 50자).",
+    "jdTextTooLongError": "채용 공고가 너무 깁니다 (최대 10,000자).",
     "durationLabel": "준비 기간",
     "startDateLabel": "시작일",
     "durations": {

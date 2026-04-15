@@ -21,10 +21,14 @@ const DURATION_OPTIONS = [
   { weeks: 24, labelKey: "6months" as const },
 ];
 
+const JD_TEXT_MIN_LENGTH = 50;
+const JD_TEXT_MAX_LENGTH = 10000;
+
 export default function GoalSetting({ resumeJson, onAnalyzed }: Props) {
   const t = useTranslations("GoalSetting");
   const [targetRole, setTargetRole] = useState("");
   const [targetCompany, setTargetCompany] = useState("");
+  const [jdText, setJdText] = useState("");
   const [durationWeeks, setDurationWeeks] = useState(8);
   const [startDate, setStartDate] = useState(
     new Date().toISOString().split("T")[0] ?? ""
@@ -36,6 +40,14 @@ export default function GoalSetting({ resumeJson, onAnalyzed }: Props) {
   async function handleAnalyze() {
     if (!targetRole.trim()) {
       setError(t("validationError"));
+      return;
+    }
+    if (jdText.trim().length < JD_TEXT_MIN_LENGTH) {
+      setError(t("jdTextValidationError"));
+      return;
+    }
+    if (jdText.length > JD_TEXT_MAX_LENGTH) {
+      setError(t("jdTextTooLongError"));
       return;
     }
 
@@ -51,6 +63,7 @@ export default function GoalSetting({ resumeJson, onAnalyzed }: Props) {
           resumeJson,
           targetRole,
           targetCompany,
+          jdText,
           durationWeeks,
           startDate,
         }),
@@ -138,6 +151,24 @@ export default function GoalSetting({ resumeJson, onAnalyzed }: Props) {
             placeholder="e.g. Toss, Kakao, Naver"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none text-[#333333]"
           />
+        </div>
+
+        {/* Job Description (required) */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {t("jdTextLabel")} <span className="text-red-500">{t("required")}</span>
+          </label>
+          <p className="text-xs text-gray-400 mb-1">{t("jdTextHint")}</p>
+          <textarea
+            value={jdText}
+            onChange={(e) => setJdText(e.target.value)}
+            placeholder={t("jdTextPlaceholder")}
+            rows={8}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none text-[#333333] resize-y"
+          />
+          <p className="text-xs text-gray-400 mt-1 text-right">
+            {jdText.length} / {JD_TEXT_MAX_LENGTH}
+          </p>
         </div>
 
         {/* Preparation duration */}
