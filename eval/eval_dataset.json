@@ -1,0 +1,27 @@
+[
+  {
+    "question": "What skills should I prioritize first to transition to a Backend Developer role?",
+    "ground_truth": "The core requirements for backend roles are REST API design skills, database (SQL/NoSQL) proficiency, and cloud (AWS/GCP) experience. Specifically, server development experience based on TypeScript or Java is highly valued.",
+    "contexts_query": "Core requirement skills for Backend Engineer JD"
+  },
+  {
+    "question": "I have 3 years of experience in Python; can I apply for a Node.js backend position?",
+    "ground_truth": "Three years of Python experience is well-recognized. Since Node.js/TypeScript shares a similar paradigm with Python, a transition is possible with 1-2 months of intensive study. Algorithm and system design skills are often evaluated as more important factors.",
+    "contexts_query": "Node.js backend requirements for Python experience transition"
+  },
+  {
+    "question": "I don't have experience building RAG pipelines; how can I bridge this gap?",
+    "ground_truth": "To build RAG experience, I recommend starting toy projects using LangChain or Google ADK. It is effective to build a vector database using Pinecone or Supabase pgvector and practice embedding actual documents.",
+    "contexts_query": "How to learn RAG pipeline LLM Vector DB"
+  },
+  {
+    "question": "What are the primary technical requirements for a Product Engineer role at a Fintech company?",
+    "ground_truth": "A Fintech Product Engineer needs proficiency in Next.js/React for frontend, Node.js/Go for backend, AWS infrastructure, and an understanding of security (OAuth/JWT). Knowledge of the financial domain and data analysis skills are also preferred.",
+    "contexts_query": "Fintech Product Engineer JD technical requirements"
+  },
+  {
+    "question": "What is lacking in my current resume compared to the standards of global tech companies?",
+    "ground_truth": "Global tech companies emphasize English resumes, system design experience, open-source contributions, and experience handling large-scale traffic. Algorithm problem-solving skills (LeetCode) and English communication abilities are also essential.",
+    "contexts_query": "Global tech company hiring requirements and resume standards"
+  }
+]

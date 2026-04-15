@@ -1,0 +1,420 @@
+[
+  {
+    "id": "fx_junior_frontend_fintech",
+    "description": "Junior React Developer (2 years) → Preparing for Fintech Product Engineer transition",
+    "request": {
+      "resumeJson": {
+        "personal": {
+          "name": "Minji Kim",
+          "email": "minji.kim@example.com",
+          "phone": "010-1234-5678",
+          "location": "Seoul, South Korea",
+          "links": [
+            "https://github.com/minji-dev"
+          ]
+        },
+        "summary": "Junior Frontend Developer with 2 years of experience. Experienced in developing web applications based on React and TypeScript. Strong strength in implementing user-centered UI/UX.",
+        "education": [
+          {
+            "institution": "Hanyang University",
+            "degree": "Bachelor's Degree",
+            "major": "Computer Science and Engineering",
+            "period": {
+              "start": "2020-03",
+              "end": "2024-02"
+            },
+            "gpa": "3.8"
+          }
+        ],
+        "skills": {
+          "languages": [
+            "TypeScript",
+            "JavaScript",
+            "HTML",
+            "CSS"
+          ],
+          "frameworks": [
+            "React",
+            "Next.js",
+            "Tailwind CSS",
+            "Zustand"
+          ],
+          "tools": [
+            "Git",
+            "Figma",
+            "Vercel",
+            "Jest"
+          ],
+          "others": []
+        },
+        "experience": [
+          {
+            "company": "Startup XYZ",
+            "title": "Frontend Developer",
+            "period": {
+              "start": "2024-03",
+              "end": null
+            },
+            "location": "Seoul",
+            "description": "Developed and maintained a React-based fintech dashboard",
+            "achievements": [
+              "Responsible for frontend maintenance of a service with 100k MAU",
+              "Improved Lighthouse performance score from 62 to 91",
+              "Increased development speed by 30% by building a common component library"
+            ]
+          }
+        ],
+        "projects": [
+          {
+            "name": "Budget Tracker App",
+            "period": {
+              "start": "2023-09",
+              "end": "2023-12"
+            },
+            "role": "Personal Project",
+            "tech_stack": [
+              "React",
+              "Firebase",
+              "Tailwind CSS"
+            ],
+            "description": "A web app for tracking personal budgets",
+            "achievements": [
+              "Integrated Firebase real-time DB",
+              "Implemented mobile responsive UI"
+            ],
+            "url": "https://github.com/minji-dev/budget-tracker"
+          }
+        ],
+        "certifications": [],
+        "languages": [
+          {
+            "language": "Korean",
+            "proficiency": "Native"
+          },
+          {
+            "language": "English",
+            "proficiency": "Intermediate (TOEIC 810)"
+          }
+        ]
+      },
+      "targetRole": "Product Engineer",
+      "targetCompany": "Toss (Viva Republica)",
+      "durationWeeks": 8,
+      "startDate": "2026-05-01"
+    },
+    "expected_gaps_keywords": [
+      "Node.js",
+      "AWS",
+      "OAuth",
+      "JWT",
+      "Go",
+      "Backend",
+      "API Design",
+      "System Design"
+    ],
+    "expected_strengths_keywords": [
+      "React",
+      "TypeScript",
+      "Next.js",
+      "Frontend"
+    ],
+    "expected_match_score_range": [
+      30,
+      70
+    ]
+  },
+  {
+    "id": "fx_python_backend_to_nodejs",
+    "description": "Python Backend Developer (3 years) → Preparing for Node.js/TypeScript Backend position transition",
+    "request": {
+      "resumeJson": {
+        "personal": {
+          "name": "Junhyuk Park",
+          "email": "junhyuk.park@example.com",
+          "phone": "010-9876-5432",
+          "location": "Seoul, South Korea",
+          "links": [
+            "https://github.com/junhyuk-dev",
+            "https://blog.junhyuk.dev"
+          ]
+        },
+        "summary": "Backend Developer with 3 years of experience in Python. Experienced in building RESTful APIs and data pipelines based on FastAPI and Django. Possesses experience in AWS infrastructure operation.",
+        "education": [
+          {
+            "institution": "Yonsei University",
+            "degree": "Bachelor's Degree",
+            "major": "School of Software",
+            "period": {
+              "start": "2018-03",
+              "end": "2022-02"
+            },
+            "gpa": "3.6"
+          }
+        ],
+        "skills": {
+          "languages": [
+            "Python",
+            "SQL",
+            "Bash"
+          ],
+          "frameworks": [
+            "FastAPI",
+            "Django",
+            "Celery",
+            "SQLAlchemy"
+          ],
+          "tools": [
+            "Docker",
+            "AWS (EC2, RDS, S3, Lambda)",
+            "PostgreSQL",
+            "Redis",
+            "Git",
+            "Terraform"
+          ],
+          "others": [
+            "REST API",
+            "gRPC",
+            "Kafka",
+            "Elasticsearch"
+          ]
+        },
+        "experience": [
+          {
+            "company": "DataTech Korea",
+            "title": "Backend Developer",
+            "period": {
+              "start": "2022-03",
+              "end": null
+            },
+            "location": "Seoul",
+            "description": "Developed backend for B2B SaaS platform based on Python/FastAPI",
+            "achievements": [
+              "Designed and implemented over 30 REST APIs based on FastAPI",
+              "Increased throughput by 5x by introducing Kafka-based event-driven architecture",
+              "Built serverless ETL pipelines using AWS Lambda + Terraform",
+              "Reduced p95 response time from 800ms to 120ms through PostgreSQL query optimization"
+            ]
+          }
+        ],
+        "projects": [
+          {
+            "name": "Real-time Notification Service",
+            "period": {
+              "start": "2023-06",
+              "end": "2023-09"
+            },
+            "role": "Backend Lead",
+            "tech_stack": [
+              "Python",
+              "FastAPI",
+              "Redis",
+              "WebSocket",
+              "AWS"
+            ],
+            "description": "Designed and implemented a real-time push notification system for 1 million DAU",
+            "achievements": [
+              "Achieved message delivery latency < 500ms",
+              "Scalable architecture based on Redis Pub/Sub"
+            ],
+            "url": null
+          }
+        ],
+        "certifications": [
+          {
+            "name": "AWS Solutions Architect Associate",
+            "issuer": "Amazon",
+            "date": "2023-04"
+          }
+        ],
+        "languages": [
+          {
+            "language": "Korean",
+            "proficiency": "Native"
+          },
+          {
+            "language": "English",
+            "proficiency": "Upper-Intermediate (TOEIC 890)"
+          }
+        ]
+      },
+      "targetRole": "Backend Engineer",
+      "targetCompany": "Kakao",
+      "durationWeeks": 6,
+      "startDate": "2026-05-01"
+    },
+    "expected_gaps_keywords": [
+      "Node.js",
+      "TypeScript",
+      "NestJS",
+      "JavaScript"
+    ],
+    "expected_strengths_keywords": [
+      "Python",
+      "AWS",
+      "FastAPI",
+      "PostgreSQL",
+      "Kafka",
+      "Docker"
+    ],
+    "expected_match_score_range": [
+      55,
+      85
+    ]
+  },
+  {
+    "id": "fx_fullstack_global_tech",
+    "description": "Full-stack Developer (5 years) → Preparing to apply for Global Tech companies (Meta/Google level)",
+    "request": {
+      "resumeJson": {
+        "personal": {
+          "name": "Sujin Lee",
+          "email": "sujin.lee@example.com",
+          "phone": "010-5555-7777",
+          "location": "Seoul, South Korea",
+          "links": [
+            "https://github.com/sujin-tech",
+            "https://linkedin.com/in/sujin-lee-dev"
+          ]
+        },
+        "summary": "Full-stack Developer with 5 years of experience. Experienced in React/Next.js frontend and Node.js/Go backend. Proven track record in large-scale service development and performance optimization. Capable of working in English.",
+        "education": [
+          {
+            "institution": "Seoul National University",
+            "degree": "Bachelor's Degree",
+            "major": "Computer Science and Engineering",
+            "period": {
+              "start": "2016-03",
+              "end": "2020-02"
+            },
+            "gpa": "3.9"
+          }
+        ],
+        "skills": {
+          "languages": [
+            "TypeScript",
+            "JavaScript",
+            "Go",
+            "Python",
+            "SQL"
+          ],
+          "frameworks": [
+            "React",
+            "Next.js",
+            "Node.js",
+            "Gin",
+            "GraphQL",
+            "gRPC"
+          ],
+          "tools": [
+            "AWS",
+            "GCP",
+            "Kubernetes",
+            "Docker",
+            "PostgreSQL",
+            "MongoDB",
+            "Redis",
+            "Git"
+          ],
+          "others": [
+            "System Design",
+            "Microservices",
+            "CI/CD",
+            "Terraform"
+          ]
+        },
+        "experience": [
+          {
+            "company": "Naver",
+            "title": "Senior Software Engineer",
+            "period": {
+              "start": "2022-01",
+              "end": null
+            },
+            "location": "Seongnam",
+            "description": "Developed backend and frontend for Naver Shopping platform",
+            "achievements": [
+              "Designed and implemented Go-based microservices architecture (5 million DAU)",
+              "Improved frontend data fetching efficiency by 40% by introducing GraphQL API layer",
+              "Built and operated Kubernetes-based deployment pipelines",
+              "System incident response: improved p99 latency from 2s to 200ms"
+            ]
+          },
+          {
+            "company": "Startup ABC",
+            "title": "Full-stack Developer",
+            "period": {
+              "start": "2020-03",
+              "end": "2021-12"
+            },
+            "location": "Seoul",
+            "description": "Developed B2C e-commerce platform based on Next.js + Node.js",
+            "achievements": [
+              "Achieved 100 points in Core Web Vitals through SSR/SSG optimization",
+              "Integrated payment systems (PG integration, refund logic)"
+            ]
+          }
+        ],
+        "projects": [
+          {
+            "name": "Open Source Contribution: popular-ui-lib",
+            "period": {
+              "start": "2023-01",
+              "end": null
+            },
+            "role": "Contributor",
+            "tech_stack": [
+              "TypeScript",
+              "React"
+            ],
+            "description": "Contributed accessibility features to a UI component library with 8k GitHub stars",
+            "achievements": [
+              "Merged 5 PRs, resolved 12 Issues"
+            ],
+            "url": "https://github.com/popular-ui-lib/ui"
+          }
+        ],
+        "certifications": [
+          {
+            "name": "Google Cloud Professional Data Engineer",
+            "issuer": "Google",
+            "date": "2024-01"
+          }
+        ],
+        "languages": [
+          {
+            "language": "Korean",
+            "proficiency": "Native"
+          },
+          {
+            "language": "English",
+            "proficiency": "Business Fluent (TOEIC 970, daily collaboration with global teams)"
+          }
+        ]
+      },
+      "targetRole": "Software Engineer",
+      "targetCompany": "Meta",
+      "durationWeeks": 12,
+      "startDate": "2026-05-01"
+    },
+    "expected_gaps_keywords": [
+      "LeetCode",
+      "Algorithm",
+      "Coding Test",
+      "English Resume",
+      "System Design Interview",
+      "Open Source"
+    ],
+    "expected_strengths_keywords": [
+      "Go",
+      "TypeScript",
+      "React",
+      "Kubernetes",
+      "System Design",
+      "High Traffic"
+    ],
+    "expected_match_score_range": [
+      50,
+      85
+    ]
+  }
+]
