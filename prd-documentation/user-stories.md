@@ -1,7 +1,7 @@
 # User Stories — Personal Career Manager AI Agent
 
-> 📄 Generated based on PRD | Total 20 Stories | Date: 2026-04-13
-> Finalized: Includes RAG Full-stack / Account-based / Chat History DB Storage
+> 📄 Generated based on PRD | Total 20 Stories | Last Updated: 2026-04-15
+> Finalized: Includes direct JD paste input / RAG reference retrieval for planning / Account-based / Chat History DB Storage
 
 ---
 
@@ -60,58 +60,62 @@
 
 ---
 
-## Epic 2: Goal Setting & JD Discovery
-> Enables users to set target companies, roles, and periods, and browse relevant JDs via RAG.
+## Epic 2: Goal Setting & JD Input
 
-### US-004 | 🔴 Must | Career Goal Setting
+> Enables users to set target companies, roles, and periods, and provide the job description text for gap analysis.
+
+### US-004 | 🔴 Must | Career Goal Setting with JD Paste
 
 - **Page:** Goal Setting Screen
-- **Feature:** Input target company, role, and duration
+- **Feature:** Input target company, role, duration, and paste JD text
 
 **As a** developer planning a career transition,
-**I want to** enter my target company, role (e.g., Product Engineer), and target duration,
-**So that** the AI can perform a context-aware gap analysis based on relevant JDs.
+**I want to** enter my target company, role (e.g., Product Engineer), target duration, and paste the full text of the job description I am applying for,
+**So that** the AI can perform a precise gap analysis based on the exact JD I am targeting.
 
 **Acceptance Criteria:**
 - [ ] Given a company name input, Then autocomplete suggests a list of known companies.
 - [ ] Given a target duration, Then it can be selected between 1 week to 6 months, and the system auto-calculates the deadline from today.
-- [ ] Given the goal is saved, Then all subsequent analyses and roadmaps are generated based on this goal.
+- [ ] Given the JD text field is submitted empty or with fewer than 50 characters, Then a validation error "Please paste the job description (minimum 50 characters)" is displayed immediately without calling the API.
+- [ ] Given a JD text exceeding 10,000 characters, Then a validation error "Job description is too long (maximum 10,000 characters)" is displayed.
+- [ ] Given valid JD text is pasted (50+ characters), Then the analysis proceeds using the pasted JD text directly for gap comparison.
+- [ ] Given the goal is saved, Then all subsequent analyses and roadmaps are generated based on this goal and the pasted JD.
 - [ ] Given a goal reset on the same account, Then a dialog appears to choose between overwriting the existing roadmap or creating a new one.
 
 ---
 
-### US-005 | 🔴 Must | RAG-based Automatic JD Search
+### US-005 | 🔴 Must | RAG-based Career Reference Context
 
 - **Page:** Goal Setting Screen → Analysis Result Screen
-- **Feature:** Vector DB similarity search for JDs
+- **Feature:** Vector DB retrieval of career trend and industry reference documents
 
-**As a** developer with a set target role,
-**I want to** automatically find relevant JDs upon entering my target company/role,
-**So that** the analysis begins without me having to manually copy-paste JDs.
+**As a** developer preparing for a specific role,
+**I want** the system to automatically retrieve relevant career trend and industry context from its knowledge base,
+**So that** my career plan reflects current industry practices and in-demand skills beyond just my pasted JD.
 
 **Acceptance Criteria:**
-- [ ] Given a goal is set, Then the top 3–5 most relevant JDs are automatically retrieved from the Vector DB using tech stack combination queries.
-- [ ] Given the JD search results, Then the source (company, role, collection date) and relevance score are displayed.
-- [ ] Given the user excludes certain JDs, Then the gap analysis is performed only using the selected JDs.
-- [ ] Given no relevant JDs are found, Then a "Manually Paste JD" option is suggested.
+- [ ] Given a goal is set with a valid JD paste, Then career trend reference documents are retrieved from the Vector DB using the target role/company as the query (`doc_type: "reference"`).
+- [ ] Given reference retrieval fails or returns 0 results, Then the career plan is still generated successfully using only the pasted JD and gap analysis (graceful degradation).
+- [ ] Given reference results are retrieved, Then they inform the career planning step (PlannerAgent) as supplementary context — not the gap analysis step.
+- [ ] Given the hybrid search (dense + BM25 + reranking) is used for retrieval, Then the existing Pinecone hybrid search pipeline in `mcp-skills/career-knowledge-base` is used without structural changes.
 
-**Notes:** Use tech stack combinations as embedding queries. Integration with Supabase Vector or Pinecone pgvector.
+**Notes:** Reference documents (career trends, IT trends, hiring patterns) are stored in the Vector DB with `doc_type: "reference"`. JD text for gap analysis is always user-provided.
 
 ---
 
-### US-006 | 🟡 Should | Manual JD Paste
+### US-006 | 🟡 Should | JD Paste UX Enhancements
 
 - **Page:** Goal Setting Screen
-- **Feature:** Custom JD text input
+- **Feature:** Improved JD paste experience
 
 **As a** developer who has a specific job posting,
-**I want to** paste the full text of a JD for analysis,
-**So that** I can apply the analysis to new postings not yet in the Vector DB.
+**I want to** paste the full text of a JD with clear guidance and character feedback,
+**So that** I can confirm my input is complete and correctly formatted before starting the analysis.
 
 **Acceptance Criteria:**
-- [ ] Given JD text is pasted, When the "Add to Analysis" button is clicked, Then the JD is added to the analysis target list.
-- [ ] Given the input text is less than 500 characters, Then a "JD content is too short" guide is displayed.
-- [ ] Given a manually entered JD, Then it is used for analysis in the same format as automatically searched JDs.
+- [ ] Given the JD textarea, Then a character counter (current / 10000) is displayed in real time.
+- [ ] Given a hint text below the label, Then it reads "Paste the full text of the job posting you are applying for."
+- [ ] Given JD text is pasted, Then it is used for analysis in the same format regardless of source (copied from a website, PDF text, etc.).
 
 ---
 
@@ -131,7 +135,7 @@
 - [ ] Given analysis completion, Then three sections (Current Skills, Missing Skills, Priorities) are clearly distinguished.
 - [ ] Given each missing skill item, Then the rationale (source JD + requirement text) is displayed.
 - [ ] Given analysis results, Then they are generated via logical comparison of project depth vs. JD requirements, not just keyword matching.
-- [ ] Given a loading state, Then progress indicators for each stage (Searching JDs → Comparative Analysis → Generating Results) are displayed.
+- [ ] Given a loading state, Then progress indicators for each stage (Fetching Reference Docs → Gap Analysis → Generating Career Plan) are displayed.
 
 **Notes:** Include examples like [Junior Frontend / Target: Toss] in few-shot prompts. Force output into JSON schema.
 
