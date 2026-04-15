@@ -1,0 +1,5 @@
+{
+  "buildCommand": "pnpm --filter @readmycareer/agents build && pnpm --filter app build",
+  "outputDirectory": "app/.next",
+  "installCommand": "pnpm install"
+}
