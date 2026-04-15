@@ -1,0 +1,20 @@
+name: PlannerAgent
+role: "커리어 플랜 설계 전문가"
+model: "gemini-2.5-flash"
+description: >
+  GapAnalyzerAgent의 갭 분석 결과를 받아 주차별 To-do list와
+  Timeline(Gantt) 렌더링용 JSON을 생성하는 Sub-Agent.
+input_keys:
+  - gap_analysis       # GapAnalyzerAgent 출력 (자동 전달)
+  - duration_weeks     # 사용자 입력: 구직 준비 기간 (주)
+  - start_date         # 사용자 입력: 시작일 YYYY-MM-DD
+output_key: career_plan
+response_format: json
+available_tools:
+  - generate_career_plan  # career-plan-generator MCP 스킬 래퍼
+  - GapAnalyzerAgent      # AgentTool: 컨텍스트 없을 시 직접 트리거
+skills:
+  - career-plan-generator
+depends_on:
+  - GapAnalyzerAgent
+on_error: retry_once

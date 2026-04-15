@@ -1,0 +1,24 @@
+name: ChatQnAAgent
+role: "커리어 상담 채팅 AI"
+model: "gemini-2.5-flash"
+description: >
+  사용자의 채팅 질의를 분석하고, RAG(Vector DB) 검색 결과와
+  GapAnalyzerAgent/PlannerAgent의 세션 컨텍스트를 결합하여 개인화된 답변을 생성하는 Sub-Agent.
+input_keys:
+  - user_message       # 사용자 채팅 메시지
+  - resume_json        # 세션 컨텍스트 (optional)
+  - gap_analysis       # 세션 컨텍스트 (optional)
+  - career_plan        # 세션 컨텍스트 (optional)
+  - chat_history       # 누적 대화 히스토리 (optional)
+output_key: chat_history
+response_format: json
+available_tools:
+  - rag_search            # career-knowledge-base MCP 스킬 래퍼
+  - get_session_context   # 세션 상태 읽기
+  - append_chat_history   # 대화 히스토리 저장
+  - GapAnalyzerAgent      # AgentTool: 실시간 갭 분석 트리거
+  - PlannerAgent          # AgentTool: 실시간 플랜 생성 트리거
+skills:
+  - career-knowledge-base
+context_window_strategy: sliding  # 오래된 대화는 요약하여 컨텍스트 유지
+on_error: graceful_fallback

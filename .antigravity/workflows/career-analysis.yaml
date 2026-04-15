@@ -1,0 +1,52 @@
+name: career-analysis
+description: "이력서 업로드 → 갭 분석 → 커리어 플랜 생성까지 전체 파이프라인"
+trigger: manual
+
+steps:
+  - id: parse_resume
+    skill: pdf-word-to-json
+    tool: parse_resume
+    input:
+      file_base64: $user.uploaded_file_base64
+      file_name: $user.file_name
+      file_type: $user.file_type
+    output: $session.resume_json
+
+  - id: search_jd
+    skill: career-knowledge-base
+    tool: search
+    input:
+      query: $user.target_role
+      top_k: 10
+      filter:
+        doc_type: jd
+    output: $session.jd_search_results
+
+  - id: analyze_gap
+    agent: GapAnalyzerAgent
+    input:
+      resume_json: $session.resume_json
+      jd_search_results: $session.jd_search_results
+    output: $session.gap_analysis
+    depends_on: [parse_resume, search_jd]
+
+  - id: generate_plan
+    agent: PlannerAgent
+    input:
+      gap_analysis: $session.gap_analysis
+      duration_weeks: $user.duration_weeks
+      start_date: $user.start_date
+      preferences:
+        hours_per_week: $user.hours_per_week
+        learning_style: $user.learning_style
+    output: $session.career_plan
+    depends_on: [analyze_gap]
+
+  - id: chat_ready
+    agent: ChatQnAAgent
+    mode: standby   # 플랜 생성 완료 후 사용자 질의 대기
+    input:
+      resume_json: $session.resume_json
+      gap_analysis: $session.gap_analysis
+      career_plan: $session.career_plan
+    depends_on: [generate_plan]
