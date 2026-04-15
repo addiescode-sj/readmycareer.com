@@ -92,7 +92,9 @@ export async function POST(req: NextRequest) {
       throw new Error("이력서 파싱에 실패했습니다.");
     }
 
-    return NextResponse.json(JSON.parse(text));
+    // Strip personal contact info (name, email, phone, etc.) before returning to the client
+    const { personal: _personal, ...resumeWithoutPersonal } = JSON.parse(text);
+    return NextResponse.json(resumeWithoutPersonal);
   } catch (err) {
     console.error("[/api/resume] Error:", err);
     return NextResponse.json(

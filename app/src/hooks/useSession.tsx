@@ -77,7 +77,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setState((prev) => {
         const next = updater(prev);
         try {
-          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+          // Strip personal contact info from resumeJson before persisting to sessionStorage
+          const { personal: _personal, ...resumeJsonSafe } =
+            (next.resumeJson ?? {}) as Record<string, unknown> & { personal?: unknown };
+          const toStore = {
+            ...next,
+            resumeJson: next.resumeJson ? resumeJsonSafe : null,
+          };
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
         } catch {}
         return next;
       });
