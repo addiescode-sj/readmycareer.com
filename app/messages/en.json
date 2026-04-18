@@ -59,6 +59,8 @@
   "RoadmapView": {
     "defaultTitle": "Career Plan",
     "chatButton": "Chat with AI Coach",
+    "copyMarkdown": "Copy as Markdown",
+    "copied": "Copied!",
     "noData": "Could not load plan data.",
     "weeksUnit": "weeks",
     "completed": "done",

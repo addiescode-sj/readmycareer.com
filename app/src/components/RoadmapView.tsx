@@ -44,10 +44,45 @@ const PRIORITY_BADGE: Record<string, string> = {
   low: "bg-green-100 text-green-700",
 };
 
+function escapeCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
+
+function convertToMarkdown(typedPlan: CareerPlan): string {
+  const title = typedPlan.target_jd_title ?? "Career Plan";
+  const lines: string[] = [];
+
+  lines.push(`# ${title}`);
+  lines.push(`**Summary:** ${typedPlan.summary}`);
+  lines.push(`**Period:** ${typedPlan.start_date} ~ ${typedPlan.end_date} (${typedPlan.duration_weeks} weeks)`);
+  lines.push("");
+  lines.push("| Week | Theme | Date Range | Milestone | Task | Category | Priority | Est. Hours |");
+  lines.push("|------|-------|------------|-----------|------|----------|----------|------------|");
+
+  for (const week of typedPlan.weeks) {
+    const milestone = week.milestone ? escapeCell(week.milestone) : "-";
+    const dateRange = `${week.date_range.start} ~ ${week.date_range.end}`;
+    for (const todo of week.todos) {
+      lines.push(
+        `| ${week.week_number} | ${escapeCell(week.theme)} | ${dateRange} | ${milestone} | ${escapeCell(todo.title)} | ${todo.category} | ${todo.priority} | ${todo.estimated_hours}h |`
+      );
+    }
+  }
+
+  return lines.join("\n");
+}
+
 export default function RoadmapView({ plan, onStartChat, onTodoToggle }: Props) {
   const t = useTranslations("RoadmapView");
   const [expandedWeek, setExpandedWeek] = useState<number | null>(1);
+  const [copied, setCopied] = useState(false);
   const typedPlan = plan as unknown as CareerPlan;
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(convertToMarkdown(typedPlan));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   if (!typedPlan.weeks?.length) {
     return (
@@ -57,14 +92,22 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle }: Props) 
     );
   }
 
-  const totalTodos = typedPlan.weeks.reduce((a, w) => a + w.todos.length, 0);
-  const doneTodos = typedPlan.weeks.reduce(
-    (a, w) => a + w.todos.filter((todo) => todo.done).length,
-    0
+  const { totalTodosCount, completedTodosCount } = (typedPlan.weeks || []).reduce(
+    (acc, week) => {
+      const weekTodos = week.todos || [];
+      acc.totalTodosCount += weekTodos.length;
+      acc.completedTodosCount += weekTodos.filter((todo) => String(todo.done) === "true").length;
+      return acc;
+    },
+    { totalTodosCount: 0, completedTodosCount: 0 }
   );
-  const progress = totalTodos > 0 ? Math.round((doneTodos / totalTodos) * 100) : 0;
+
+  const progressPercentage = totalTodosCount > 0 
+    ? Math.round((completedTodosCount / totalTodosCount) * 100) 
+    : 0;
 
   return (
+
     <div className="flex flex-col gap-6">
       {/* Summary card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
@@ -75,30 +118,38 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle }: Props) 
             </h2>
             <p className="text-sm text-gray-500 mt-1">{typedPlan.summary}</p>
           </div>
-          <button
-            onClick={onStartChat}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
-          >
-            {t("chatButton")}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleCopy}
+              className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap"
+            >
+              {copied ? t("copied") : t("copyMarkdown")}
+            </button>
+            <button
+              onClick={onStartChat}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
+            >
+              {t("chatButton")}
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-6 text-sm text-gray-600 mb-4">
           <span>📅 {typedPlan.start_date} ~ {typedPlan.end_date}</span>
           <span>📋 {typedPlan.duration_weeks}{t("weeksUnit")}</span>
-          <span>✅ {doneTodos}/{totalTodos} {t("completed")}</span>
+          <span>✅ {completedTodosCount}/{totalTodosCount} {t("completed")}</span>
         </div>
 
         {/* Progress bar */}
         <div>
           <div className="flex justify-between text-xs text-gray-500 mb-1">
             <span>{t("overallProgress")}</span>
-            <span>{progress}%</span>
+            <span>{progressPercentage}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
               className="bg-blue-600 h-2 rounded-full transition-all"
-              style={{ width: `${progress}%` }}
+              style={{ width: `${progressPercentage}%` }}
             />
           </div>
         </div>

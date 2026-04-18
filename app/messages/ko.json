@@ -59,6 +59,8 @@
   "RoadmapView": {
     "defaultTitle": "커리어 플랜",
     "chatButton": "AI 코치와 채팅",
+    "copyMarkdown": "마크다운으로 복사",
+    "copied": "복사됨!",
     "noData": "플랜 데이터를 불러올 수 없습니다.",
     "weeksUnit": "주",
     "completed": "완료",
