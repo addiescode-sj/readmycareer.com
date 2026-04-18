@@ -52,6 +52,8 @@ Gap analysis results must always include 'evidence' (e.g., explicitly stating wh
 
 - Daily Study Log: Generates a text template summarizing the day's learning content, alongside a checklist required to advance to the next step.
 
+- Markdown Export: A "Copy as Markdown" button on the roadmap summary card converts the full career plan (all weeks and tasks) into a structured markdown table. Users can paste this directly into Notion, GitHub Issues, or any markdown-compatible tool. The table columns are: Week | Theme | Date Range | Milestone | Task | Category | Priority | Est. Hours.
+
 ### 4. Interactive Career Coaching (Chat)
 - Description: Dynamically restructures the roadmap in real-time based on user feedback (e.g., If the user states, "I am already familiar with this concept," the AI adjusts the plan accordingly).
 

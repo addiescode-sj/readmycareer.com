@@ -1,6 +1,6 @@
 # User Stories — Personal Career Manager AI Agent
 
-> 📄 Generated based on PRD | Total 20 Stories | Last Updated: 2026-04-15
+> 📄 Generated based on PRD | Total 21 Stories | Last Updated: 2026-04-18
 > Finalized: Includes direct JD paste input / RAG reference retrieval for planning / Account-based / Chat History DB Storage
 
 ---
@@ -210,6 +210,24 @@
 
 ---
 
+### US-021 | 🟡 Should | Copy Career Plan as Markdown Table
+
+- **Page:** Roadmap Screen
+- **Feature:** One-click markdown table export to clipboard
+
+**As a** developer with a generated career plan,
+**I want to** copy the full plan as a markdown table with a single click,
+**So that** I can paste it into Notion, GitHub Issues, or any external tool without manual reformatting.
+
+**Acceptance Criteria:**
+- [ ] Given the Roadmap Screen is displayed, Then a "Copy as Markdown" button is visible in the summary card.
+- [ ] Given the button is clicked, Then the full plan (all weeks, all tasks) is copied to the clipboard as a markdown table.
+- [ ] Given a successful copy, Then the button label changes to "Copied!" for 2 seconds, then reverts.
+- [ ] Given the markdown output, Then it includes a header block (title, summary, period) and a table with columns: Week | Theme | Date Range | Milestone | Task | Category | Priority | Est. Hours.
+- [ ] Given a cell value containing a pipe character (`|`), Then it is escaped as `\|` to prevent table breakage.
+
+---
+
 ### US-012 | 🟡 Should | Timeline Toggle Visualization
 
 - **Page:** Roadmap Screen
@@ -375,12 +393,12 @@
 | Priority | Count | Stories |
 |----------|-------|---------|
 | 🔴 Must  | 10    | US-001~003, 005, 007, 009~011, 013~014, 016 |
-| 🟡 Should| 6     | US-006, 008, 012, 015, 018 |
+| 🟡 Should| 7     | US-006, 008, 012, 015, 018, 021 |
 | 🟢 Could | 2     | US-017, 019 |
 | ⚪ Won't | 1     | US-020 |
-| **Total**| **20**| |
+| **Total**| **21**| |
 
-**Recommended MVP Scope:** All "Must" + US-006 (Manual JD), US-012 (Toggle Visualization), US-015 (Chat History) — US-001 ~ US-016.
+**Recommended MVP Scope:** All "Must" + US-006 (Manual JD), US-012 (Toggle Visualization), US-015 (Chat History), US-021 (Copy as Markdown) — US-001 ~ US-016, US-021.
 
 **Next Steps:**
 - [ ] Story point estimation with the dev team (Planning Poker) — Focus on US-016 RAG pipeline effort.
