@@ -97,7 +97,11 @@ export default function GoalSetting({ resumeJson, onAnalyzed }: Props) {
           const data  = JSON.parse(dataLine.replace("data:", "").trim()) as Record<string, unknown>;
 
           if (event === "progress") {
-            setStage((data["message"] as string) ?? "");
+            const step = (data["step"] as string) ?? "";
+            const progressKeys = ["reference_search", "reference_search_done", "cache", "gap_analysis", "planning", "done"] as const;
+            type ProgressKey = typeof progressKeys[number];
+            const isKnownStep = (progressKeys as readonly string[]).includes(step);
+            setStage(isKnownStep ? t(`progress.${step as ProgressKey}`) : "");
           } else if (event === "result") {
             setStage(t("analysisComplete"));
             onAnalyzed(
