@@ -15,6 +15,18 @@ const AnalyzeSchema = z.object({
 
 const MAX_BODY_BYTES = 500_000; // 500 KB — covers resumeJson + jdText + metadata
 
+function detectLocale(acceptLanguage: string | null): "ko" | "en" {
+  if (!acceptLanguage) return "ko";
+  const langs = acceptLanguage
+    .split(",")
+    .map((l) => l.split(";")[0].trim().toLowerCase());
+  for (const lang of langs) {
+    if (lang.startsWith("ko")) return "ko";
+    if (lang.startsWith("en")) return "en";
+  }
+  return "ko";
+}
+
 const KB_SKILL_PATH = resolve(
   process.cwd(),
   "../mcp-skills/career-knowledge-base/dist/index.js"
@@ -96,6 +108,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const locale = detectLocale(req.headers.get("accept-language"));
+
   let body: z.infer<typeof AnalyzeSchema>;
   try {
     const raw = await req.json();
@@ -117,7 +131,7 @@ export async function POST(req: NextRequest) {
       try {
         // 1. Fetch career trend reference documents from Vector DB (supplementary context for planner).
         //    JD gap analysis now uses the raw jdText provided directly by the user.
-        send("progress", { step: "reference_search", message: "Fetching career trend reference documents..." });
+        send("progress", { step: "reference_search" });
         let referenceResults: any[] = [];
 
         try {
@@ -130,10 +144,7 @@ export async function POST(req: NextRequest) {
           referenceResults = [];
         }
 
-        send("progress", {
-          step: "reference_search_done",
-          message: `Reference documents retrieved: ${referenceResults.length}`,
-        });
+        send("progress", { step: "reference_search_done" });
 
         // 2. Run agent pipeline (gap analysis uses jdText directly; planner uses referenceResults)
         const { runCareerAnalysis } = await import(
@@ -147,7 +158,8 @@ export async function POST(req: NextRequest) {
             startDate: string,
             targetRole: string,
             targetCompany: string,
-            onProgress?: (step: string, detail?: string) => void
+            onProgress?: (step: string, detail?: string) => void,
+            locale?: "ko" | "en"
           ) => Promise<unknown>;
         };
 
@@ -159,8 +171,9 @@ export async function POST(req: NextRequest) {
           startDate,
           targetRole,
           targetCompany,
-          // onProgress → forward as SSE progress event
-          (step, detail) => send("progress", { step, message: detail ?? step })
+          // onProgress → forward step key as SSE progress event; client translates
+          (step) => send("progress", { step }),
+          locale
         );
 
         // 3. Send result
