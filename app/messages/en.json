@@ -49,6 +49,14 @@
     },
     "preparingAnalysis": "Preparing analysis...",
     "analysisComplete": "Done!",
+    "progress": {
+      "reference_search": "Fetching career trend reference documents...",
+      "reference_search_done": "Reference documents loaded",
+      "cache": "Checking resume context cache...",
+      "gap_analysis": "Analyzing resume ↔ JD gaps...",
+      "planning": "Generating career plan...",
+      "done": "Analysis complete"
+    },
     "submitButton": "Start Gap Analysis",
     "submittingButton": "Analyzing...",
     "validationError": "Please enter your target role.",

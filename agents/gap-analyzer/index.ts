@@ -45,7 +45,7 @@ export { INSTRUCTION as GAP_ANALYZER_INSTRUCTION };
 
 export const GapAnalyzerAgent = new LlmAgent({
   name: "GapAnalyzerAgent",
-  model: "gemini-2.5-flash",
+  model: "gemini-3.1-flash-lite-preview",
   description:
     "Compares user resume JSON and raw JD text to analyze competency strengths, gaps, and improvement priorities.",
   instruction: INSTRUCTION,

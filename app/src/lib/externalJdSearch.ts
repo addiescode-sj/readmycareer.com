@@ -33,7 +33,7 @@ export async function searchJdFromGoogle(
   const genai = new GoogleGenerativeAI(apiKey);
   const model = genai.getGenerativeModel(
     {
-      model: "gemini-2.5-flash",
+      model: "gemini-3.1-flash-lite-preview",
       tools: [{ googleSearch: {} } as any],
     } as any
   );

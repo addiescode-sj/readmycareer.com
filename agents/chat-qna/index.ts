@@ -127,7 +127,7 @@ const INSTRUCTION = `
 
 export const ChatQnAAgent = new LlmAgent({
   name: "ChatQnAAgent",
-  model: "gemini-2.5-flash",
+  model: "gemini-3.1-flash-lite-preview",
   description:
     "사용자 채팅 질의에 RAG + 이전 에이전트 컨텍스트를 결합하여 개인화된 답변을 생성합니다.",
   instruction: INSTRUCTION,

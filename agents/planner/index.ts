@@ -100,7 +100,7 @@ export { INSTRUCTION as PLANNER_INSTRUCTION };
 
 export const PlannerAgent = new LlmAgent({
   name: "PlannerAgent",
-  model: "gemini-2.5-flash",
+  model: "gemini-3.1-flash-lite-preview",
   description:
     "GapAnalyzerAgent의 갭 분석 결과를 받아 주차별 커리어 플랜과 타임라인 JSON을 생성합니다.",
   instruction: INSTRUCTION,

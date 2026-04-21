@@ -107,8 +107,7 @@ const SCHEMA_DESCRIPTION = `
   "experience": [{ "company": string, "title": string, "period": {"start":"YYYY-MM","end":"YYYY-MM"|null}, "location": string|null, "description": string|null, "achievements": string[] }],
   "projects": [{ "name": string, "period": {"start":"YYYY-MM","end":"YYYY-MM"|null}|null, "role": string|null, "tech_stack": string[], "description": string|null, "achievements": string[], "url": string|null }],
   "certifications": [{ "name": string, "issuer": string|null, "date": "YYYY-MM"|null }],
-  "languages": [{ "language": string, "proficiency": string|null }],
-  "raw_text": "(Copy original text exactly)"
+  "languages": [{ "language": string, "proficiency": string|null }]
 }`;
 
 async function parseWithGemini(rawText: string): Promise<ResumeJson> {
@@ -117,13 +116,18 @@ async function parseWithGemini(rawText: string): Promise<ResumeJson> {
 
   const genai = new GoogleGenerativeAI(apiKey);
   const model = genai.getGenerativeModel({
-    model: "gemini-2.5-flash",
-    generationConfig: { responseMimeType: "application/json" },
+    model: "gemini-3.1-flash-lite-preview",
+    generationConfig: { 
+      responseMimeType: "application/json",
+      temperature: 0.1 // Lower temperature for more stable JSON
+    },
   });
 
   const prompt = `Analyze the resume text and convert it into the specified JSON schema.
-You must output **exactly one JSON object**, and do not wrap it in a list or array.
-Fill missing fields with null or an empty array ([]).
+IMPORTANT: 
+- DO NOT include a "raw_text" field in your JSON. 
+- Ensure all string values are on a single line (escape newlines as \\n if needed).
+- Output ONLY the JSON object.
 
 JSON Schema:
 ${SCHEMA_DESCRIPTION}
@@ -139,9 +143,32 @@ ${rawText.slice(0, 10000)}`;
 
       let parsed: any;
       try {
-        parsed = JSON.parse(rawResponse);
+        // Remove markdown code blocks if present
+        let cleanedResponse = rawResponse
+          .replace(/```json\n?/g, "")
+          .replace(/```\n?/g, "")
+          .trim();
+
+        // Handle cases where LLM might include literal newlines inside strings
+        // This is a simple but effective fix for most cases
+        try {
+          parsed = JSON.parse(cleanedResponse);
+        } catch (initialError) {
+          // If parsing fails, try to escape literal newlines within strings
+          try {
+            // Regex that matches strings starting after :, [, or , and handles multi-line content without ES2018 flags
+            const escapedResponse = cleanedResponse.replace(/([:[,])\s*"([\s\S]*?[^\\])"/g, (match, prefix, content) => {
+              return prefix + ' "' + content.replace(/\n/g, "\\n").replace(/\r/g, "\\r") + '"';
+            });
+            parsed = JSON.parse(escapedResponse);
+          } catch (secondError) {
+            console.error("[/api/resume] JSON Parse Error. Raw response:", rawResponse);
+            throw new Error("Failed to parse LLM response as JSON.");
+          }
+        }
+
         if (Array.isArray(parsed)) parsed = parsed[0];
-      } catch {
+      } catch (parseError) {
         console.error("[/api/resume] JSON Parse Error. Raw response:", rawResponse);
         throw new Error("Failed to parse LLM response as JSON.");
       }

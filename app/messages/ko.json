@@ -49,6 +49,14 @@
     },
     "preparingAnalysis": "분석 준비 중...",
     "analysisComplete": "완료!",
+    "progress": {
+      "reference_search": "커리어 트렌드 참고 문서를 가져오는 중...",
+      "reference_search_done": "참고 문서 검색 완료",
+      "cache": "이력서 캐시 확인 중...",
+      "gap_analysis": "이력서 ↔ JD 갭 분석 중...",
+      "planning": "커리어 플랜 생성 중...",
+      "done": "분석 완료"
+    },
     "submitButton": "갭 분석 시작",
     "submittingButton": "분석 중...",
     "validationError": "지원 직무를 입력해주세요.",
