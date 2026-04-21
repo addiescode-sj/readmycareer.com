@@ -147,3 +147,10 @@ CLAUDE.md
 
 # Secrets
 readmycareer-c547f96903fa.json
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings (machine-specific, not for sharing)
+.claude/settings.local.json
