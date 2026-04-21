@@ -159,6 +159,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const acceptLanguage = req.headers.get("accept-language");
+  const locale = (() => {
+    if (!acceptLanguage) return "ko" as const;
+    const langs = acceptLanguage.split(",").map((l) => l.split(";")[0].trim().toLowerCase());
+    for (const lang of langs) {
+      if (lang.startsWith("ko")) return "ko" as const;
+      if (lang.startsWith("en")) return "en" as const;
+    }
+    return "ko" as const;
+  })();
+
   let parsed: z.infer<typeof ChatSchema>;
   try {
     parsed = ChatSchema.parse(await req.json());
@@ -240,7 +251,7 @@ export async function POST(req: NextRequest) {
 
       // Gemini Flash streaming
       const genai = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
-      const model = genai.getGenerativeModel({ model: "gemini-2.5-flash" });
+      const model = genai.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
       const systemPrompt = `당신은 readmycareer.com의 커리어 코칭 AI입니다.
 사용자의 개인 커리어 데이터와 JD 데이터베이스를 기반으로 구체적이고 실행 가능한 조언을 제공합니다.
@@ -257,7 +268,8 @@ ${sessionContext?.career_plan ? `커리어 플랜: ${JSON.stringify(sessionConte
 ${ragText || "관련 자료 없음"}
 
 위 컨텍스트를 바탕으로 사용자 질문에 답변하세요. 마크다운 형식으로 답변해도 됩니다.
-⚠️ 답변 시 target_company/target_role을 절대 임의로 변경하지 마세요.`;
+⚠️ 답변 시 target_company/target_role을 절대 임의로 변경하지 마세요.
+${locale === "en" ? "⚠️ LANGUAGE: Always respond in English regardless of the language of the context or question." : "⚠️ LANGUAGE: 항상 한국어로 답변하세요. JD나 질문이 영어로 작성되어 있어도 반드시 한국어로 답변하세요."}`;
 
       const GENERATION_TIMEOUT = 30_000;
       const result = await Promise.race([

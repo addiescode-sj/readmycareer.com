@@ -21,7 +21,7 @@ import {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MODEL_NAME = "gemini-2.5-flash";
+const MODEL_NAME = "gemini-3.1-flash-lite-preview";
 
 /** Applies the same thresholds as harness-eval.md at runtime */
 const QUALITY_THRESHOLDS = {
@@ -423,20 +423,26 @@ export async function runCareerAnalysis(
   startDate: string,
   targetRole: string,
   targetCompany: string,
-  onProgress?: (step: string, detail?: string) => void
+  onProgress?: (step: string, detail?: string) => void,
+  locale?: "ko" | "en"
 ): Promise<CareerPlanOutput & { gap_analysis: any }> {
   const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GOOGLE_API_KEY or GEMINI_API_KEY is not set.");
 
+  const langDirective =
+    locale === "en"
+      ? "\n\n⚠️ LANGUAGE: Write ALL natural-language text fields in English."
+      : "\n\n⚠️ LANGUAGE: Write ALL natural-language text fields in Korean (한국어).";
+
   // ── Step 0: Prepare resume cache ─────────────────────────────────────────
   // Strip personal contact info — not needed for analysis, reduces token usage.
   const resumeForAnalysis = omitPersonal(resumeJson);
-  onProgress?.("cache", "Checking resume context cache...");
+  onProgress?.("cache");
   const gapCacheName = await getOrCreateResumeCache(apiKey, GAP_ANALYZER_INSTRUCTION, resumeForAnalysis);
 
   // ── Step 1: Gap analysis (with quality gate) ─────────────────────────────
   // Uses the user-provided raw JD text directly for precise gap identification.
-  onProgress?.("gap_analysis", "Analyzing resume ↔ JD gaps...");
+  onProgress?.("gap_analysis");
   console.log("[ORCHESTRATOR] Step 1: Gap Analysis started...");
 
   const gapAnalysisData = await runWithQualityGate<any>(
@@ -462,6 +468,7 @@ Output JSON only.
 
 ## Job Description:
 ${jdText}
+${langDirective}
 ${retryFeedback}
 `.trim();
 
@@ -483,7 +490,7 @@ ${retryFeedback}
 
   // ── Step 2: Career plan generation (with quality gate) ───────────────────
   // Uses gap analysis results + career trend reference documents from Vector DB.
-  onProgress?.("planning", `Generating ${durationWeeks}-week career plan...`);
+  onProgress?.("planning");
   console.log("[ORCHESTRATOR] Step 2: Career Planning started...");
 
   // Reuse resume cache for plan generation (maximize savings for same resume + different goal)
@@ -532,6 +539,7 @@ ${
 }
 
 Start date: ${startDate} / Duration: ${durationWeeks} weeks
+${langDirective}
 ${retryFeedback}
 `.trim();
 
@@ -551,7 +559,7 @@ ${retryFeedback}
     `[ORCHESTRATOR] Step 2 complete — weeks=${careerPlanData.weeks?.length ?? careerPlanData.career_plan?.weeks?.length}`
   );
 
-  onProgress?.("done", "Analysis complete");
+  onProgress?.("done");
 
   return normalizePlan(careerPlanData, gapAnalysisData, durationWeeks, startDate);
 }
