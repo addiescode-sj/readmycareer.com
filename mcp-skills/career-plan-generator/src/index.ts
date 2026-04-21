@@ -143,7 +143,7 @@ async function generateCareerPlan(input: PlanInput): Promise<PlanOutput> {
 
   const genai = new GoogleGenerativeAI(apiKey);
   const model = genai.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: "gemini-3.1-flash-lite-preview",
     generationConfig: { responseMimeType: "application/json" },
   });
 

@@ -102,8 +102,8 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle }: Props) 
     { totalTodosCount: 0, completedTodosCount: 0 }
   );
 
-  const progressPercentage = totalTodosCount > 0 
-    ? Math.round((completedTodosCount / totalTodosCount) * 100) 
+  const progressPercentage = totalTodosCount > 0
+    ? Math.round((completedTodosCount / totalTodosCount) * 100)
     : 0;
 
   return (
@@ -116,7 +116,7 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle }: Props) 
             <h2 className="text-xl font-semibold text-gray-900">
               {typedPlan.target_jd_title ?? t("defaultTitle")}
             </h2>
-            <p className="text-sm text-gray-500 mt-1">{typedPlan.summary}</p>
+            <p className="text-sm text-gray-500 mt-4 w-full">{typedPlan.summary}</p>
           </div>
           <div className="flex gap-2">
             <button
