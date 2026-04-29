@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { useTranslations } from "next-intl";
+import { createClient } from "@/lib/supabase/client";
 
 interface Message {
   role: "user" | "assistant";
@@ -17,6 +18,7 @@ interface Props {
   targetCompany: string | null;
   /** true when used inside a floating panel — fills full height without an outer wrapper */
   compact?: boolean;
+  planId?: string;
 }
 
 export default function ChatInterface({
@@ -26,8 +28,10 @@ export default function ChatInterface({
   targetRole,
   targetCompany,
   compact = false,
+  planId,
 }: Props) {
   const t = useTranslations("ChatInterface");
+  const supabase = createClient();
 
   const SUGGESTED_QUESTIONS = [
     t("questions.q1"),
@@ -45,6 +49,25 @@ export default function ChatInterface({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    if (!planId) return;
+
+    async function fetchHistory() {
+      const { data, error } = await supabase
+        .from("recent_chat_messages")
+        .select("role, content")
+        .eq("career_plan_id", planId)
+        .order("sequence_number", { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        setMessages(data as Message[]);
+      }
+    }
+
+    fetchHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planId]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -55,6 +78,22 @@ export default function ChatInterface({
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsLoading(true);
+
+    let currentUserId: string | undefined;
+
+    // Save user message to Supabase
+    if (planId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        currentUserId = user.id;
+        await supabase.from("chat_messages").insert({
+          career_plan_id: planId,
+          user_id: currentUserId,
+          role: "user",
+          content: text,
+        });
+      }
+    }
 
     // Add assistant message placeholder
     setMessages((prev) => [
@@ -123,6 +162,16 @@ export default function ChatInterface({
         }
         if (streamDone) break;
       }
+
+      // Save assistant message to Supabase
+      if (planId && currentUserId && assistantText) {
+        await supabase.from("chat_messages").insert({
+          career_plan_id: planId,
+          user_id: currentUserId,
+          role: "assistant",
+          content: assistantText,
+        });
+      }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : t("genericError");
       setMessages((prev) => [
@@ -148,11 +197,10 @@ export default function ChatInterface({
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-                  msg.role === "user"
+                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${msg.role === "user"
                     ? "bg-blue-600 text-white rounded-br-sm"
                     : "bg-gray-100 text-gray-900 rounded-bl-sm"
-                }`}
+                  }`}
               >
                 {msg.role === "assistant" ? (
                   <div className="prose prose-sm max-w-none">
