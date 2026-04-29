@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 /**
  * In-memory sliding window rate limiter based on client IP
- *
- * Limitation: In serverless / multi-instance environments, counters are isolated per instance.
- * For production scale, replace with an external store such as Upstash Redis.
  */
-
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 const LIMITS: Record<string, number> = {
@@ -14,6 +11,7 @@ const LIMITS: Record<string, number> = {
   "/api/chat": 20,
   "/api/resume": 10,
   "/api/sync": 5,
+  "/api/career-plans": 20,
 };
 
 interface RateEntry {
@@ -22,7 +20,6 @@ interface RateEntry {
 
 const store = new Map<string, RateEntry>();
 
-// Periodically clean up stale entries (prevent memory leak)
 setInterval(() => {
   const now = Date.now();
   Array.from(store.entries()).forEach(([key, entry]) => {
@@ -43,11 +40,40 @@ function getIp(req: NextRequest): string {
   );
 }
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", pathname);
+
+  // Initialize response
+  let res = NextResponse.next({ request: { headers: requestHeaders } });
+
+  // Update Supabase session
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value));
+          res = NextResponse.next({ request: { headers: requestHeaders } });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            res.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  await supabase.auth.getUser();
 
   const limit = LIMITS[pathname];
-  if (!limit) return NextResponse.next();
+  if (!limit) {
+    return res;
+  }
 
   const ip = getIp(req);
   const key = `${ip}:${pathname}`;
@@ -72,9 +98,9 @@ export function middleware(req: NextRequest) {
   entry.timestamps.push(now);
   store.set(key, entry);
 
-  return NextResponse.next();
+  return res;
 }
 
 export const config = {
-  matcher: ["/api/analyze", "/api/chat", "/api/resume", "/api/sync"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
