@@ -22,7 +22,11 @@
       "Bash(brew install *)",
       "Bash(git check-ignore *)",
       "Read(//Users/addie.lee/.claude/**)",
-      "Bash(node_modules/.bin/tsc --noEmit)"
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(gh release create v0.2.0 --title v0.2.0 --body ' *)",
+      "Bash(gh release create v0.2.0 --title v0.2.0 --notes ' *)",
+      "Bash(git reset *)",
+      "Bash(git restore *)"
     ],
     "additionalDirectories": [
       "/tmp"
