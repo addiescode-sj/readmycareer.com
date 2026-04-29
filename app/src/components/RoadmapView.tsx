@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
+import { createClient } from "@/lib/supabase/client";
+import { useSession } from "@/hooks/useSession";
 
 interface TodoItem {
   id: string;
@@ -36,6 +38,228 @@ interface Props {
   plan: Record<string, unknown>;
   onStartChat: () => void;
   onTodoToggle: (weekNumber: number, todoId: string, done: boolean) => void;
+  hideSaveBanner?: boolean;
+}
+
+const MILESTONES: [number, string][] = [
+  [30,  "30% 달성! 잘하고 있어요 👏"],
+  [60,  "60% 완료! 절반 넘었어요 💪"],
+  [90,  "90% 달성! 거의 다 왔어요 🔥"],
+  [100, "완주! 대단해요! 🏆"],
+];
+
+function RunnerCharacter({ isRunning }: { isRunning: boolean }) {
+  const dur = "0.38s";
+  const frameA = isRunning ? { animation: `run-frame-a ${dur} steps(1,end) infinite` } : {};
+  const frameB = isRunning ? { animation: `run-frame-b ${dur} steps(1,end) infinite` } : { opacity: 0 };
+  const bob    = isRunning ? { animation: `runner-stride ${dur} ease-in-out infinite` } : {};
+
+  // Colors from user's SVG
+  const cHair = "#1A1A1A";
+  const cSkin = "#F8C8B1";
+  const cTop = "#FF9500";
+  const cBottom = "#2E7DFF";
+  const cShoe = "#1A1A1A";
+
+  return (
+    <svg width="42" height="42" viewBox="0 0 24 24" shapeRendering="crispEdges"
+         style={{ overflow: "visible", display: "block" }}>
+      <g style={bob}>
+        
+        {/* Frame A: Back Limbs */}
+        <g style={frameA}>
+          {/* Back Arm (Down/Back) */}
+          <rect x="9" y="10" width="1" height="1" fill={cSkin} />
+          <rect x="8" y="11" width="1" height="2" fill={cSkin} />
+          <rect x="7" y="13" width="1" height="1" fill={cSkin} />
+          
+          {/* Back Leg (Kicked Back) */}
+          <rect x="8" y="15" width="2" height="1" fill={cSkin} />
+          <rect x="6" y="16" width="2" height="1" fill={cSkin} />
+          <rect x="5" y="17" width="1" height="2" fill={cSkin} />
+          <rect x="3" y="18" width="2" height="1" fill={cShoe} />
+        </g>
+
+        {/* Frame B: Back Limbs (Up/Forward) */}
+        <g style={frameB}>
+          {/* Back Arm (Up/Forward) shifted -6x from Front Arm */}
+          <rect x="9" y="9" width="1" height="1" fill={cSkin} />
+          <rect x="10" y="8" width="2" height="1" fill={cSkin} />
+          <rect x="11" y="7" width="1" height="1" fill={cSkin} />
+          
+          {/* Back Leg (Straight/Forward) shifted -3x from Front Leg */}
+          <rect x="10" y="15" width="2" height="2" fill={cSkin} />
+          <rect x="11" y="17" width="2" height="2" fill={cSkin} />
+          <rect x="12" y="19" width="1" height="2" fill={cSkin} />
+          <rect x="12" y="21" width="2" height="1" fill={cShoe} />
+        </g>
+
+        {/* Always-visible: Head, Hair, Torso, Shorts */}
+        {/* Hair (Ponytail) */}
+        <rect x="5" y="4" width="3" height="1" fill={cHair} />
+        <rect x="4" y="5" width="5" height="1" fill={cHair} />
+        <rect x="3" y="6" width="6" height="1" fill={cHair} />
+        <rect x="2" y="7" width="5" height="1" fill={cHair} />
+        
+        {/* Head & Main Hair */}
+        <rect x="10" y="3" width="5" height="1" fill={cHair} />
+        <rect x="9" y="4" width="7" height="1" fill={cHair} />
+        <rect x="9" y="5" width="2" height="3" fill={cHair} />
+        <rect x="11" y="5" width="5" height="4" fill={cSkin} />
+        <rect x="15" y="5" width="1" height="1" fill={cHair} />
+        
+        {/* Torso (Orange Top) */}
+        <rect x="10" y="9" width="4" height="4" fill={cTop} />
+        <rect x="14" y="10" width="1" height="3" fill={cTop} />
+
+        {/* Shorts (Blue) */}
+        <rect x="10" y="13" width="5" height="2" fill={cBottom} />
+        <rect x="10" y="15" width="2" height="1" fill={cBottom} />
+
+        {/* Frame A: Front Limbs */}
+        <g style={frameA}>
+          {/* Front Arm (Up/Forward) */}
+          <rect x="15" y="9" width="1" height="1" fill={cSkin} />
+          <rect x="16" y="8" width="2" height="1" fill={cSkin} />
+          <rect x="17" y="7" width="1" height="1" fill={cSkin} />
+          
+          {/* Front Leg (Straight/Forward) */}
+          <rect x="13" y="15" width="2" height="2" fill={cSkin} />
+          <rect x="14" y="17" width="2" height="2" fill={cSkin} />
+          <rect x="15" y="19" width="1" height="2" fill={cSkin} />
+          <rect x="15" y="21" width="2" height="1" fill={cShoe} />
+        </g>
+
+        {/* Frame B: Front Limbs (Down/Back) */}
+        <g style={frameB}>
+          {/* Front Arm (Down/Back) shifted +6x from Back Arm */}
+          <rect x="15" y="10" width="1" height="1" fill={cSkin} />
+          <rect x="14" y="11" width="1" height="2" fill={cSkin} />
+          <rect x="13" y="13" width="1" height="1" fill={cSkin} />
+          
+          {/* Front Leg (Kicked Back) shifted +4x from Back Leg */}
+          <rect x="12" y="15" width="2" height="1" fill={cSkin} />
+          <rect x="10" y="16" width="2" height="1" fill={cSkin} />
+          <rect x="9" y="17" width="1" height="2" fill={cSkin} />
+          <rect x="7" y="18" width="2" height="1" fill={cShoe} />
+        </g>
+
+        {/* Speed Lines */}
+        {isRunning && (
+          <g>
+            <rect x="1" y="11" width="2" height="1" fill={cTop} opacity="0.3" />
+            <rect x="0" y="15" width="3" height="1" fill={cBottom} opacity="0.3" />
+          </g>
+        )}
+      </g>
+    </svg>
+  );
+}
+
+function RunnerTrack({
+  progress,
+  completedCount,
+  totalCount,
+}: {
+  progress: number;
+  completedCount: number;
+  totalCount: number;
+}) {
+  const prevRef = useRef(progress);
+  const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const prev = prevRef.current;
+    for (const [m, label] of MILESTONES) {
+      if (prev < m && progress >= m) {
+        setMilestoneMsg(label);
+        const t = setTimeout(() => setMilestoneMsg(null), 3000);
+        prevRef.current = progress;
+        return () => clearTimeout(t);
+      }
+    }
+    prevRef.current = progress;
+  }, [progress]);
+
+  // Clamp so runner stays visible within the track
+  const runnerLeft = Math.min(93, Math.max(0, progress));
+  const isRunning = progress > 0 && progress < 100;
+  const isDone = progress >= 100;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">전체 진행률</span>
+          <span className="text-xs text-gray-400 tabular-nums">({completedCount}/{totalCount} 완료)</span>
+        </div>
+        <span className="text-xs font-semibold text-gray-700 tabular-nums">{progress}%</span>
+      </div>
+
+      {/* Milestone celebration */}
+      {milestoneMsg && (
+        <div className="text-center text-xs font-bold text-yellow-800 bg-yellow-100 border border-yellow-200 rounded-lg py-1.5 mb-2 animate-bounce">
+          {milestoneMsg}
+        </div>
+      )}
+
+      {/* Track container */}
+      <div
+        className="relative rounded-xl overflow-hidden select-none"
+        style={{ height: "62px", background: "#F8FAFC" }}
+      >
+        {/* Completed fill */}
+        <div
+          className="absolute inset-y-0 left-0 transition-all duration-700"
+          style={{
+            width: `${progress}%`,
+            background: isDone
+              ? "linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%)"
+              : "linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%)",
+          }}
+        />
+
+        {/* Ground */}
+        <div className="absolute bottom-3 left-0 right-0 h-px bg-gray-300" />
+
+        {/* Dashed path ahead of runner */}
+        <div
+          className="absolute bottom-3 right-0 h-px"
+          style={{
+            left: `${progress}%`,
+            background:
+              "repeating-linear-gradient(90deg, #D1D5DB 0px, #D1D5DB 6px, transparent 6px, transparent 12px)",
+          }}
+        />
+
+        {/* Milestone notches at 30 / 60 / 90 */}
+        {[30, 60, 90].map((m) => (
+          <div
+            key={m}
+            className="absolute flex flex-col items-center pointer-events-none"
+            style={{ left: `${m}%`, bottom: "3px", transform: "translateX(-50%)" }}
+          >
+            <div className="w-px h-3 bg-gray-400/50" />
+          </div>
+        ))}
+
+        {/* Finish flag */}
+        <div className="absolute right-2 bottom-3 text-base leading-none" style={{ transform: "translateY(-2px)" }}>
+          {isDone ? "🏆" : "🏁"}
+        </div>
+
+        {/* Runner */}
+        <div
+          className="absolute bottom-3 transition-all duration-1000 ease-in-out"
+          style={{ left: `${runnerLeft}%`, transform: "translateX(-50%) translateY(-2px)" }}
+        >
+          <RunnerCharacter isRunning={isRunning} />
+        </div>
+
+
+      </div>
+    </div>
+  );
 }
 
 const PRIORITY_BADGE: Record<string, string> = {
@@ -72,7 +296,196 @@ function convertToMarkdown(typedPlan: CareerPlan): string {
   return lines.join("\n");
 }
 
-export default function RoadmapView({ plan, onStartChat, onTodoToggle }: Props) {
+type SaveStatus = "idle" | "saving" | "saved" | "error" | "limit_reached";
+
+function SaveBanner() {
+  const { careerPlan, gapAnalysis, targetRole, targetCompany, jdText } = useSession();
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const supabase = createClient();
+
+  useEffect(() => {
+    // Restore saved state from this browser session
+    if (sessionStorage.getItem("rmc_plan_saved") === "true") {
+      setSaveStatus("saved");
+    }
+
+    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setIsLoggedIn(!!session?.user);
+
+        // Auto-save when user signs in and plan is ready in session
+        if (event === "SIGNED_IN" && session?.user && careerPlan) {
+          if (sessionStorage.getItem("rmc_plan_saved") === "true") return;
+          if (!jdText) {
+            // Old session without jdText — can't save
+            setSaveStatus("error");
+            return;
+          }
+
+          setSaveStatus("saving");
+          try {
+            const res = await fetch("/api/career-plans", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                targetRole: targetRole ?? "",
+                targetCompany: targetCompany ?? "",
+                jdText,
+                careerPlan,
+                gapAnalysis: gapAnalysis ?? {},
+              }),
+            });
+
+            if (res.ok) {
+              sessionStorage.setItem("rmc_plan_saved", "true");
+              setSaveStatus("saved");
+            } else {
+              const body = await res.json().catch(() => ({})) as Record<string, string>;
+              setSaveStatus(body["error"] === "plan_limit_reached" ? "limit_reached" : "error");
+            }
+          } catch {
+            setSaveStatus("error");
+          }
+        }
+      }
+    );
+    return () => subscription.unsubscribe();
+  // Intentionally omit careerPlan/jdText from deps — snapshot is taken on SIGNED_IN
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function signInWithGoogle() {
+    setOauthLoading(true);
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/api/auth/callback?next=/dashboard`,
+      },
+    });
+  }
+
+  async function retrySave() {
+    if (!careerPlan || !jdText) return;
+    setSaveStatus("saving");
+    try {
+      const res = await fetch("/api/career-plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetRole: targetRole ?? "",
+          targetCompany: targetCompany ?? "",
+          jdText,
+          careerPlan,
+          gapAnalysis: gapAnalysis ?? {},
+        }),
+      });
+      if (res.ok) {
+        sessionStorage.setItem("rmc_plan_saved", "true");
+        setSaveStatus("saved");
+      } else {
+        const body = await res.json().catch(() => ({})) as Record<string, string>;
+        setSaveStatus(body["error"] === "plan_limit_reached" ? "limit_reached" : "error");
+      }
+    } catch {
+      setSaveStatus("error");
+    }
+  }
+
+  if (isLoggedIn === null) return null;
+
+  if (saveStatus === "saving") {
+    return (
+      <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-2xl px-6 py-4">
+        <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
+        <p className="text-sm text-blue-700">플랜을 저장하는 중...</p>
+      </div>
+    );
+  }
+
+  if (saveStatus === "saved") {
+    return (
+      <div className="flex items-center justify-between gap-4 bg-green-50 border border-green-200 rounded-2xl px-6 py-4">
+        <p className="text-sm font-medium text-green-800">✓ 플랜이 저장되었습니다!</p>
+        <a
+          href="/dashboard"
+          className="text-sm text-green-700 underline hover:text-green-900"
+        >
+          대시보드에서 보기 →
+        </a>
+      </div>
+    );
+  }
+
+  if (saveStatus === "limit_reached") {
+    return (
+      <div className="flex items-center justify-between gap-4 bg-yellow-50 border border-yellow-200 rounded-2xl px-6 py-4">
+        <p className="text-sm text-yellow-800">
+          저장 가능한 플랜 수(3개)에 도달했습니다. 대시보드에서 기존 플랜을 삭제한 후 다시 시도해 주세요.
+        </p>
+        <a href="/dashboard" className="text-sm text-yellow-700 underline hover:text-yellow-900 whitespace-nowrap">
+          대시보드 →
+        </a>
+      </div>
+    );
+  }
+
+  if (saveStatus === "error") {
+    return (
+      <div className="flex items-center justify-between gap-4 bg-red-50 border border-red-200 rounded-2xl px-6 py-4">
+        <p className="text-sm text-red-700">플랜 저장에 실패했습니다.</p>
+        {jdText && (
+          <button
+            onClick={retrySave}
+            className="text-sm text-red-700 underline hover:text-red-900 whitespace-nowrap"
+          >
+            다시 시도
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Not logged in — show save prompt
+  if (!isLoggedIn) {
+    return (
+      <div className="flex items-center justify-between gap-4 bg-blue-50 border border-blue-200 rounded-2xl px-6 py-4">
+        <div>
+          <p className="text-sm font-medium text-blue-900">
+            이 플랜을 저장하고 싶으신가요?
+          </p>
+          <p className="text-xs text-blue-600 mt-0.5">
+            Google로 로그인하면 브라우저를 닫아도 플랜이 유지됩니다.
+          </p>
+        </div>
+        <button
+          onClick={signInWithGoogle}
+          disabled={oauthLoading}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-300 rounded-lg shadow-sm hover:shadow-md hover:bg-blue-50 transition-all text-blue-700 text-sm font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {oauthLoading ? (
+            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+            </svg>
+          )}
+          Google로 저장하기
+        </button>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveBanner }: Props) {
   const t = useTranslations("RoadmapView");
   const [expandedWeek, setExpandedWeek] = useState<number | null>(1);
   const [copied, setCopied] = useState(false);
@@ -107,8 +520,9 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle }: Props) 
     : 0;
 
   return (
-
     <div className="flex flex-col gap-6">
+      {!hideSaveBanner && <SaveBanner />}
+
       {/* Summary card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-start justify-between mb-4">
@@ -134,25 +548,17 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle }: Props) 
           </div>
         </div>
 
-        <div className="flex gap-6 text-sm text-gray-600 mb-4">
+        <div className="flex gap-4 text-sm text-gray-600 mb-4">
           <span>📅 {typedPlan.start_date} ~ {typedPlan.end_date}</span>
           <span>📋 {typedPlan.duration_weeks}{t("weeksUnit")}</span>
-          <span>✅ {completedTodosCount}/{totalTodosCount} {t("completed")}</span>
         </div>
 
-        {/* Progress bar */}
-        <div>
-          <div className="flex justify-between text-xs text-gray-500 mb-1">
-            <span>{t("overallProgress")}</span>
-            <span>{progressPercentage}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-blue-600 h-2 rounded-full transition-all"
-              style={{ width: `${progressPercentage}%` }}
-            />
-          </div>
-        </div>
+        {/* Runner progress track */}
+        <RunnerTrack
+          progress={progressPercentage}
+          completedCount={completedTodosCount}
+          totalCount={totalTodosCount}
+        />
       </div>
 
       {/* Weekly plan */}
@@ -219,21 +625,6 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle }: Props) 
                         </div>
                         {todo.description && (
                           <p className="text-xs text-gray-500 mt-1">{todo.description}</p>
-                        )}
-                        {todo.resources.length > 0 && (
-                          <div className="flex gap-2 mt-2 flex-wrap">
-                            {todo.resources.map((r, i) => (
-                              <a
-                                key={i}
-                                href={r.url ?? "#"}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-blue-600 hover:underline"
-                              >
-                                🔗 {r.label}
-                              </a>
-                            ))}
-                          </div>
                         )}
                       </div>
                     </div>
