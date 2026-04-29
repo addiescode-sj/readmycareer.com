@@ -18,6 +18,8 @@ The difficulty for candidates in objectively identifying specific technical stac
 The absence of a concrete, daily/weekly execution plan (Action Plan) for studying and preparing, despite having a set timeframe for the job search.
 
 ## 2. User Journey
+- Sign-in: The user signs in via Google OAuth. On first sign-in, a profile is automatically created and persisted to Supabase. Data is retained across sessions.
+
 - Data Input: The user uploads their resume (PDF/Text) or manually inputs their technical stack and project experience into the chatbot.
 
 - Goal Setting: The user inputs the desired target company, specific role (e.g., Product Engineer), the target job search duration (e.g., 1 month), and **pastes the full text of the job description (JD) they are applying for**.
@@ -59,6 +61,8 @@ Gap analysis results must always include 'evidence' (e.g., explicitly stating wh
 
 - Response Quality: Leverages the high inference speed of Gemini Fast (Flash) mode to propose partial plan revisions within 3 seconds.
 
+- Chat History Retention: Chat messages are stored per career plan and retained for 7 days. Users can view conversation history when revisiting an existing career plan. Messages older than 7 days are automatically purged.
+
 ## 4. Technical Requirements
 ### 1. Model & Prompt Engineering
 Gemini Fast Mode Integration: Utilizes the large context window to input the user's lengthy resume and the full texts of the pasted JD into a single inference process.
@@ -80,3 +84,16 @@ JD Input: JD text is provided directly by the user (paste input) rather than ret
 Tech Stack: Next.js, Tailwind CSS, Shadcn UI (Optimized for a Vibe Coding environment to ensure rapid MVP development).
 
 Visualization Logic: The client-side application parses the AI-generated Markdown/JSON data and renders it into an interactive, toggleable timeline view.
+
+### 4. Data Persistence & Auth
+Auth: Google OAuth only (via Supabase Auth). No email/password accounts.
+
+Primary DB: Supabase PostgreSQL — stores profiles, resumes, career plans, gap analyses, roadmaps, weekly tasks, daily logs, and chat history.
+
+Vector DB: Pinecone remains the primary RAG store. `jd_documents` is also mirrored in Supabase pgvector (768-dim, gemini-embedding-001) as a supplementary fallback.
+
+Career Plan Limit: Maximum 3 active/completed career plans per user account. Enforced at the database level via a BEFORE INSERT trigger. Archived plans do not count toward the limit — archiving is the mechanism to free up a slot.
+
+Chat History Retention: 7 days per career plan. Enforced via a daily pg_cron cleanup job and a `recent_chat_messages` VIEW that automatically filters to the last 7 days.
+
+Row Level Security: All user data tables are protected by Supabase RLS. Users can only access their own data.

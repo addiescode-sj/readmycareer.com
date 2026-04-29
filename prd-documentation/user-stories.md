@@ -8,20 +8,23 @@
 ## Epic 1: User Profile & Account Management
 > Provides the foundation for job seekers to register their history and goals while maintaining data across sessions.
 
-### US-001 | 🔴 Must | Sign up via Email
+### US-001 | 🔴 Must | Sign in via Google OAuth
 
-- **Page:** Sign-up Screen
-- **Feature:** Account creation based on email verification
+- **Page:** Sign-in Screen
+- **Feature:** Google OAuth authentication via Supabase Auth
 
 **As a** developer preparing for a career transition,
-**I want to** create an account using my email and password,
-**So that** I can save my resume and roadmap data to continue where I left off during my next visit.
+**I want to** sign in using my Google account,
+**So that** I can save my resume and roadmap data and continue where I left off.
 
 **Acceptance Criteria:**
-- [ ] Given valid email/password in the sign-up form, When the sign-up button is clicked, Then a verification email is sent.
-- [ ] Given the verification link is clicked, When the link is valid, Then the account is activated and redirected to the dashboard.
-- [ ] Given an already registered email, When the sign-up button is clicked, Then an "Email already in use" error message is displayed.
-- [ ] Given a password shorter than 8 characters, When the sign-up button is clicked, Then an inline validation error is immediately displayed.
+- [ ] Given the sign-in screen, When the "Continue with Google" button is clicked, Then the Google OAuth consent screen is presented.
+- [ ] Given successful Google OAuth, When redirected back to the app, Then a `profiles` row is automatically created in Supabase using the user's `display_name` and `avatar_url` from Google.
+- [ ] Given a returning user, When they sign in again, Then their existing career plans, roadmaps, and chat history are restored.
+- [ ] Given an unauthenticated request to any protected page, Then the user is redirected to the sign-in screen.
+- [ ] Given the sign-out button is clicked, Then the Supabase session is cleared and the user is redirected to the sign-in screen.
+
+**Notes:** Email/password authentication is out of scope. Supabase Auth handles the Google OAuth provider. The `handle_new_user` DB trigger auto-populates the `profiles` table on first sign-in.
 
 ---
 
@@ -81,6 +84,9 @@
 - [ ] Given valid JD text is pasted (50+ characters), Then the analysis proceeds using the pasted JD text directly for gap comparison.
 - [ ] Given the goal is saved, Then all subsequent analyses and roadmaps are generated based on this goal and the pasted JD.
 - [ ] Given a goal reset on the same account, Then a dialog appears to choose between overwriting the existing roadmap or creating a new one.
+- [ ] Given a user already has 3 active or completed career plans, When they attempt to create a new plan, Then the system displays: "You have reached the maximum of 3 career plans. Archive an existing plan to create a new one." No API call is made.
+
+**Notes:** The 3-plan limit is enforced at the database level via a BEFORE INSERT trigger on the `career_plans` table. Archived plans do not count toward the limit.
 
 ---
 
@@ -293,9 +299,12 @@
 **So that** I don't have to explain the context from scratch every time.
 
 **Acceptance Criteria:**
-- [ ] Given entry to the chat screen after login, Then previous chat history is loaded chronologically.
-- [ ] Given more than 50 messages, Then past history can be viewed via pagination or infinite scroll.
-- [ ] Given a search for a specific date, Then history can be filtered by date.
+- [ ] Given entry to the chat screen after sign-in, Then chat messages from the last 7 days are loaded chronologically via the `recent_chat_messages` view.
+- [ ] Given messages older than 7 days, Then they are automatically purged by the daily cleanup job and are no longer visible.
+- [ ] Given more than 50 messages within the 7-day window, Then past history can be viewed via pagination or infinite scroll using `sequence_number` for cursor-based pagination.
+- [ ] Given a career plan switch, Then chat history shown is scoped to the currently active career plan.
+
+**Notes:** Chat messages are stored in the `chat_messages` table with a `career_plan_id` FK. The `recent_chat_messages` VIEW automatically filters to `created_at > NOW() - INTERVAL '7 days'`. A `cleanup_old_chat_messages()` pg_cron job runs daily at 03:00 UTC to hard-delete expired rows.
 
 ---
 
@@ -392,7 +401,7 @@
 
 | Priority | Count | Stories |
 |----------|-------|---------|
-| 🔴 Must  | 10    | US-001~003, 005, 007, 009~011, 013~014, 016 |
+| 🔴 Must  | 10    | US-001 (Google OAuth), US-002~003, 005, 007, 009~011, 013~014, 016 |
 | 🟡 Should| 7     | US-006, 008, 012, 015, 018, 021 |
 | 🟢 Could | 2     | US-017, 019 |
 | ⚪ Won't | 1     | US-020 |
@@ -404,4 +413,4 @@
 - [ ] Story point estimation with the dev team (Planning Poker) — Focus on US-016 RAG pipeline effort.
 - [ ] Register US-020 (Parallel Goals) in the next sprint backlog.
 - [ ] Refine US-007 Gap Analysis JSON schema with PO/Dev (Front-end rendering dependency).
-- [ ] Decide on Vector DB architecture (Supabase pgvector vs. Pinecone).
+- [x] DB architecture decided: Supabase PostgreSQL is the primary relational DB; Pinecone remains the primary RAG vector store. `jd_documents` mirrored in Supabase pgvector (768-dim, gemini-embedding-001) as supplementary storage.
