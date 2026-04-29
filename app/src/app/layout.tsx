@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import { SessionLayout } from "@/components/SessionLayout";
+import { AuthListener } from "@/components/AuthListener";
 
 export const metadata: Metadata = {
   title: "readmycareer.com — AI Career Coach",
@@ -25,14 +27,20 @@ export default async function RootLayout({
 }) {
   const locale = await getLocale();
   const messages = await getMessages();
+  const headersList = await headers();
+  const pathname = headersList.get("x-pathname") ?? "/";
+  const isDashboard = pathname.startsWith("/dashboard");
 
   return (
     <html lang={locale}>
       <body className="min-h-screen bg-gray-50">
         <NextIntlClientProvider messages={messages}>
-          <SessionLayout upload={upload} goal={goal} plan={plan} chat={chat} />
-          {/* children = page.tsx (empty slot) — no rendering needed */}
-          <div className="hidden">{children}</div>
+          <AuthListener />
+          {isDashboard ? (
+            children
+          ) : (
+            <SessionLayout upload={upload} goal={goal} plan={plan} chat={chat} />
+          )}
         </NextIntlClientProvider>
       </body>
     </html>
