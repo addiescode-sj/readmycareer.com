@@ -9,7 +9,8 @@ interface Props {
     careerPlan: Record<string, unknown>,
     gapAnalysis: Record<string, unknown>,
     targetRole: string,
-    targetCompany: string
+    targetCompany: string,
+    jdText: string
   ) => void;
 }
 
@@ -108,7 +109,8 @@ export default function GoalSetting({ resumeJson, onAnalyzed }: Props) {
               data as Record<string, unknown>,
               (data["gap_analysis"] as Record<string, unknown>) ?? {},
               targetRole,
-              targetCompany
+              targetCompany,
+              jdText
             );
           } else if (event === "error") {
             throw new Error((data["message"] as string) ?? t("analysisError"));

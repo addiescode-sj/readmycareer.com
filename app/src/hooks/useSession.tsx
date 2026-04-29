@@ -18,6 +18,7 @@ interface SessionState {
   gapAnalysis: Record<string, unknown> | null;
   targetRole: string | null;
   targetCompany: string | null;
+  jdText: string | null;
   isChatOpen: boolean;
 }
 
@@ -28,7 +29,8 @@ interface SessionContextValue extends SessionState {
     careerPlan: Record<string, unknown>,
     gapAnalysis: Record<string, unknown>,
     targetRole: string,
-    targetCompany: string
+    targetCompany: string,
+    jdText: string
   ) => void;
   toggleTodoDone: (weekNumber: number, todoId: string, done: boolean) => void;
   goToChat: () => void;
@@ -43,6 +45,7 @@ const INITIAL: SessionState = {
   gapAnalysis: null,
   targetRole: null,
   targetCompany: null,
+  jdText: null,
   isChatOpen: false,
 };
 
@@ -104,7 +107,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       careerPlan: Record<string, unknown>,
       gapAnalysis: Record<string, unknown>,
       targetRole: string,
-      targetCompany: string
+      targetCompany: string,
+      jdText: string
     ) => {
       commit((prev) => ({
         ...prev,
@@ -112,6 +116,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         gapAnalysis,
         targetRole,
         targetCompany,
+        jdText,
         step: "plan",
       }));
     },
