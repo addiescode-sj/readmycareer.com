@@ -21,14 +21,17 @@
       "Bash(gh release create v0.1.1 --title v0.1.1 --notes ' *)",
       "Bash(brew install *)",
       "Bash(git check-ignore *)",
-      "Read(//Users/addie.lee/.claude/**)"
+      "Read(//Users/addie.lee/.claude/**)",
+      "Bash(node_modules/.bin/tsc --noEmit)"
     ],
     "additionalDirectories": [
       "/tmp"
     ]
   },
+  "enabledMcpjsonServers": [
+    "supabase"
+  ],
   "enabledPlugins": {
     "pinecone@claude-plugins-official": true
-  },
-  "enabledMcpjsonServers": ["supabase"]
+  }
 }
