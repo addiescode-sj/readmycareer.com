@@ -20,17 +20,6 @@ interface RateEntry {
 
 const store = new Map<string, RateEntry>();
 
-setInterval(() => {
-  const now = Date.now();
-  Array.from(store.entries()).forEach(([key, entry]) => {
-    const valid = entry.timestamps.filter((t: number) => now - t < WINDOW_MS);
-    if (valid.length === 0) {
-      store.delete(key);
-    } else {
-      entry.timestamps = valid;
-    }
-  });
-}, WINDOW_MS);
 
 function getIp(req: NextRequest): string {
   return (
