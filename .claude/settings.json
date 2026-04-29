@@ -15,7 +15,13 @@
       "Bash(grep -E \"\\\\.\\(ts|yaml\\)$\")",
       "Bash(/Users/addie.lee/work/readmycareer.com/agents/node_modules/.bin/tsc --noEmit)",
       "Bash(echo \"Exit: $?\")",
-      "Bash(/Users/addie.lee/work/readmycareer.com/app/node_modules/.bin/tsc --noEmit)"
+      "Bash(/Users/addie.lee/work/readmycareer.com/app/node_modules/.bin/tsc --noEmit)",
+      "Bash(git tag *)",
+      "Bash(git push *)",
+      "Bash(gh release create v0.1.1 --title v0.1.1 --notes ' *)",
+      "Bash(brew install *)",
+      "Bash(git check-ignore *)",
+      "Read(//Users/addie.lee/.claude/**)"
     ],
     "additionalDirectories": [
       "/tmp"
@@ -23,5 +29,6 @@
   },
   "enabledPlugins": {
     "pinecone@claude-plugins-official": true
-  }
+  },
+  "enabledMcpjsonServers": ["supabase"]
 }
