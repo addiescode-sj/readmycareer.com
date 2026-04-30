@@ -188,8 +188,27 @@ export function DashboardClient({ profile, initialPlans }: Props) {
   const [plans, setPlans] = useState<CareerPlan[]>(initialPlans);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [savingTitle, setSavingTitle] = useState(false);
   const supabase = createClient();
   const router = useRouter();
+
+  // Sync state when props change (e.g. after router.refresh())
+  useEffect(() => {
+    setPlans(initialPlans);
+  }, [initialPlans]);
+
+  // Refresh data when page is restored from bfcache (browser back/forward)
+  useEffect(() => {
+    function handlePageShow(e: PageTransitionEvent) {
+      if (e.persisted) {
+        router.refresh();
+      }
+    }
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, [router]);
 
   useEffect(() => {
     async function syncUnsavedPlan() {
@@ -231,6 +250,34 @@ export function DashboardClient({ profile, initialPlans }: Props) {
     syncUnsavedPlan();
   }, [router]);
 
+  function startEditTitle(plan: CareerPlan, e: React.MouseEvent) {
+    e.stopPropagation();
+    setEditingPlanId(plan.id);
+    setEditingTitle(plan.title ?? plan.target_role);
+  }
+
+  async function handleSaveTitle(planId: string) {
+    const trimmed = editingTitle.trim();
+    if (!trimmed) return;
+    setSavingTitle(true);
+    const { error } = await supabase
+      .from("career_plans")
+      .update({ title: trimmed })
+      .eq("id", planId);
+    if (!error) {
+      setPlans((prev) =>
+        prev.map((p) => (p.id === planId ? { ...p, title: trimmed } : p))
+      );
+    }
+    setSavingTitle(false);
+    setEditingPlanId(null);
+  }
+
+  function cancelEditTitle() {
+    setEditingPlanId(null);
+    setEditingTitle("");
+  }
+
   async function handleDelete(planId: string) {
     setDeleting(true);
     const { error } = await supabase
@@ -244,6 +291,13 @@ export function DashboardClient({ profile, initialPlans }: Props) {
     }
     setConfirmDeleteId(null);
     setDeleting(false);
+  }
+
+  function handleNewPlan(e: React.MouseEvent) {
+    e.preventDefault();
+    sessionStorage.removeItem("rmc_session");
+    sessionStorage.removeItem("rmc_plan_saved");
+    window.location.href = "/?new=true";
   }
 
   const displayName = profile?.display_name ?? "사용자";
@@ -275,13 +329,13 @@ export function DashboardClient({ profile, initialPlans }: Props) {
 
         {/* New plan button */}
         <div className="mb-6">
-          <Link
-            href="/"
+          <button
+            onClick={handleNewPlan}
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
             <span>+</span>
             새 플랜 시작하기
-          </Link>
+          </button>
         </div>
 
         {/* Weekly achievement chart */}
@@ -291,9 +345,12 @@ export function DashboardClient({ profile, initialPlans }: Props) {
         {plans.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-2xl border border-gray-200">
             <p className="text-gray-400 text-sm mb-3">저장된 커리어 플랜이 없습니다.</p>
-            <Link href="/" className="text-blue-600 text-sm hover:underline">
+            <button
+              onClick={handleNewPlan}
+              className="text-blue-600 text-sm hover:underline"
+            >
               첫 플랜을 만들어보세요 →
-            </Link>
+            </button>
           </div>
         ) : (
           <div className="flex flex-col gap-4">
@@ -312,10 +369,49 @@ export function DashboardClient({ profile, initialPlans }: Props) {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h2 className="text-base font-semibold text-gray-900 truncate group-hover:text-blue-700 transition-colors">
-                          {plan.title ?? plan.target_role}
-                        </h2>
+                      <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
+                        {editingPlanId === plan.id ? (
+                          <div className="flex items-center gap-1 flex-1 min-w-0">
+                            <input
+                              autoFocus
+                              value={editingTitle}
+                              onChange={(e) => setEditingTitle(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSaveTitle(plan.id);
+                                if (e.key === "Escape") cancelEditTitle();
+                              }}
+                              className="flex-1 min-w-0 text-base font-semibold text-gray-900 border border-blue-400 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                            />
+                            <button
+                              onClick={() => handleSaveTitle(plan.id)}
+                              disabled={savingTitle}
+                              className="text-blue-600 hover:text-blue-800 text-xs px-1 disabled:opacity-50"
+                              title="저장"
+                            >
+                              ✓
+                            </button>
+                            <button
+                              onClick={cancelEditTitle}
+                              className="text-gray-400 hover:text-gray-600 text-xs px-1"
+                              title="취소"
+                            >
+                              ✗
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <h2 className="text-base font-semibold text-gray-900 truncate group-hover:text-blue-700 transition-colors">
+                              {plan.title ?? plan.target_role}
+                            </h2>
+                            <button
+                              onClick={(e) => startEditTitle(plan, e)}
+                              className="shrink-0 text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                              title="이름 수정"
+                            >
+                              ✏️
+                            </button>
+                          </>
+                        )}
                         <span
                           className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLOR[plan.status] ?? STATUS_COLOR.active}`}
                         >

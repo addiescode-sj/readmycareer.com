@@ -169,6 +169,13 @@ function ReturningUserGate({ children }: { children: ReactNode }) {
   const supabase = createClient();
 
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const isNew = searchParams.get("new") === "true";
+    if (isNew) {
+      setStatus("idle");
+      return;
+    }
+
     const hasLoggedIn = localStorage.getItem("rmc_has_logged_in") === "true";
     if (!hasLoggedIn) {
       setStatus("idle");
@@ -210,8 +217,8 @@ export function SessionLayout({ upload, goal, plan, chat }: SlotProps) {
   const t = useTranslations("SessionLayout");
 
   return (
-    <SessionProvider>
-      <main className="container mx-auto max-w-4xl px-4 py-8">
+    <main className="container mx-auto max-w-4xl px-4 py-8">
+      <SessionProvider>
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">{t("title")}</h1>
           <p className="mt-1 text-gray-500">{t("subtitle")}</p>
@@ -219,7 +226,7 @@ export function SessionLayout({ upload, goal, plan, chat }: SlotProps) {
         <ReturningUserGate>
           <StepRouter upload={upload} goal={goal} plan={plan} />
         </ReturningUserGate>
-      </main>
-    </SessionProvider>
+      </SessionProvider>
+    </main>
   );
 }

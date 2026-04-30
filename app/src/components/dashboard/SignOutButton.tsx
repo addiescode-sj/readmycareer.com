@@ -1,17 +1,15 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 
 export function SignOutButton() {
   const supabase = createClient();
-  const router = useRouter();
 
   async function handleSignOut() {
     await supabase.auth.signOut();
     localStorage.removeItem("rmc_has_logged_in");
     localStorage.removeItem("rmc_last_login_at");
-    router.push("/");
+    window.location.href = "/";
   }
 
   return (
