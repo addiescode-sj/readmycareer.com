@@ -36,6 +36,9 @@ export default function SavedPlanClient({ careerPlan, planId }: { careerPlan: an
     if (error) {
       console.error("Failed to update roadmap:", error);
       alert("진행도 저장에 실패했습니다. (DB 권한 확인 필요)");
+    } else {
+      // Invalidate router cache so dashboard reflects updated progress on next visit
+      router.refresh();
     }
   }
 
