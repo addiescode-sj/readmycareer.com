@@ -26,10 +26,13 @@
       "Bash(gh release create v0.2.0 --title v0.2.0 --body ' *)",
       "Bash(gh release create v0.2.0 --title v0.2.0 --notes ' *)",
       "Bash(git reset *)",
-      "Bash(git restore *)"
+      "Bash(git restore *)",
+      "Bash(grep -E \"\\\\.\\(sql|ts|json\\)$\")"
     ],
     "additionalDirectories": [
-      "/tmp"
+      "/tmp",
+      "/Users/addie.lee/work/readmycareer.com/app/src/app/api/career-plans",
+      "/Users/addie.lee/work/readmycareer.com/app/src/app/api/career-plans/[id]"
     ]
   },
   "enabledMcpjsonServers": [
