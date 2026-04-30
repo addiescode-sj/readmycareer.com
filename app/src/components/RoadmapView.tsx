@@ -410,12 +410,12 @@ function SaveBanner() {
     return (
       <div className="flex items-center justify-between gap-4 bg-green-50 border border-green-200 rounded-2xl px-6 py-4">
         <p className="text-sm font-medium text-green-800">✓ 플랜이 저장되었습니다!</p>
-        <a
-          href="/dashboard"
-          className="text-sm text-green-700 underline hover:text-green-900"
+        <button
+          onClick={() => { window.location.href = "/dashboard"; }}
+          className="text-sm text-green-700 underline hover:text-green-900 bg-transparent p-0 cursor-pointer"
         >
           대시보드에서 보기 →
-        </a>
+        </button>
       </div>
     );
   }
@@ -426,9 +426,12 @@ function SaveBanner() {
         <p className="text-sm text-yellow-800">
           저장 가능한 플랜 수(3개)에 도달했습니다. 대시보드에서 기존 플랜을 삭제한 후 다시 시도해 주세요.
         </p>
-        <a href="/dashboard" className="text-sm text-yellow-700 underline hover:text-yellow-900 whitespace-nowrap">
+        <button
+          onClick={() => { window.location.href = "/dashboard"; }}
+          className="text-sm text-yellow-700 underline hover:text-yellow-900 whitespace-nowrap bg-transparent p-0 cursor-pointer"
+        >
           대시보드 →
-        </a>
+        </button>
       </div>
     );
   }
@@ -485,11 +488,24 @@ function SaveBanner() {
   return null;
 }
 
+function initExpandedWeeks(weeks: WeekPlan[]): Set<number> {
+  const expanded = new Set<number>();
+  for (const week of weeks) {
+    if (week.todos.some((todo) => String(todo.done) === "true" || todo.done === true)) {
+      expanded.add(week.week_number);
+    }
+  }
+  if (expanded.size === 0) expanded.add(1);
+  return expanded;
+}
+
 export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveBanner }: Props) {
   const t = useTranslations("RoadmapView");
-  const [expandedWeek, setExpandedWeek] = useState<number | null>(1);
-  const [copied, setCopied] = useState(false);
   const typedPlan = plan as unknown as CareerPlan;
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(() =>
+    initExpandedWeeks(typedPlan.weeks ?? [])
+  );
+  const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
     await navigator.clipboard.writeText(convertToMarkdown(typedPlan));
@@ -572,9 +588,15 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
             <button
               className="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 transition-colors"
               onClick={() =>
-                setExpandedWeek(
-                  expandedWeek === week.week_number ? null : week.week_number
-                )
+                setExpandedWeeks((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(week.week_number)) {
+                    next.delete(week.week_number);
+                  } else {
+                    next.add(week.week_number);
+                  }
+                  return next;
+                })
               }
             >
               <div className="flex items-center gap-3">
@@ -592,13 +614,13 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-400">{t("todoCount", { count: week.todos.length })}</span>
                 <span className="text-gray-400">
-                  {expandedWeek === week.week_number ? "▲" : "▼"}
+                  {expandedWeeks.has(week.week_number) ? "▲" : "▼"}
                 </span>
               </div>
             </button>
 
             {/* Todo list */}
-            {expandedWeek === week.week_number && (
+            {expandedWeeks.has(week.week_number) && (
               <div className="border-t border-gray-100 px-5 pb-4">
                 {week.todos.map((todo) => (
                   <div key={todo.id} className="py-3 border-b border-gray-50 last:border-0">
