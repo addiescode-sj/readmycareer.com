@@ -10,8 +10,8 @@ const ChatSchema = z.object({
   targetCompany: z.string().max(200).nullish(),
   sessionContext: z
     .object({
-      gap_analysis: z.record(z.unknown()).optional(),
-      career_plan: z.record(z.unknown()).optional(),
+      gap_analysis: z.record(z.unknown()).nullish(),
+      career_plan: z.record(z.unknown()).nullish(),
       target_role: z.string().max(200).nullish(),
       target_company: z.string().max(200).nullish(),
     })

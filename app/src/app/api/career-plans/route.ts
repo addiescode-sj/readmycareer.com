@@ -87,11 +87,18 @@ export async function POST(request: Request) {
   const { targetRole, targetCompany, jdText, careerPlan, gapAnalysis } = parsed.data;
 
   // 1. Insert career_plans
+  const formattedDate = new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(new Date());
+  const defaultTitle = `${formattedDate}에 저장된 ${careerPlan.target_jd_title ?? targetRole}`;
+
   const { data: plan, error: planError } = await supabase
     .from("career_plans")
     .insert({
       user_id: user.id,
-      title: careerPlan.target_jd_title ?? targetRole,
+      title: defaultTitle,
       target_role: targetRole,
       target_company: targetCompany,
       jd_text: jdText,
