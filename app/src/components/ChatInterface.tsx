@@ -123,6 +123,11 @@ export default function ChatInterface({
       });
       // clearTimeout is called in finally after streaming completes
 
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({})) as Record<string, string>;
+        throw new Error(errBody["error"] ?? t("genericError"));
+      }
+
       if (!res.body) throw new Error(t("noStream"));
 
       const reader = res.body.getReader();
@@ -161,6 +166,15 @@ export default function ChatInterface({
           }
         }
         if (streamDone) break;
+      }
+
+      // Replace placeholder with error message if no content was streamed
+      if (!assistantText) {
+        setMessages((prev) => [
+          ...prev.slice(0, -1),
+          { role: "assistant", content: t("genericError") },
+        ]);
+        return;
       }
 
       // Save assistant message to Supabase
