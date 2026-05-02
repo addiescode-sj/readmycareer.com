@@ -18,69 +18,69 @@ const GEMINI_TIMEOUT_MS = 120_000;
 // ─── Resume Schema (mirrored from mcp-skills/pdf-word-to-json) ────────────────
 
 const DateRangeSchema = z.object({
-  start: z.string().describe("Start date (YYYY-MM or YYYY)"),
-  end: z.string().nullable().describe("End date; null if currently employed"),
+  start: z.string().catch(""),
+  end: z.string().nullable().catch(null),
 });
 
 const ResumeJsonSchema = z.object({
   personal: z.object({
-    name: z.string().nullable(),
-    email: z.string().nullable(),
-    phone: z.string().nullable(),
-    location: z.string().nullable(),
-    links: z.array(z.string()).describe("List of URLs such as LinkedIn, GitHub, etc."),
-  }),
-  summary: z.string().nullable().describe("Self-introduction / Profile summary"),
+    name: z.string().nullable().catch(null),
+    email: z.string().nullable().catch(null),
+    phone: z.string().nullable().catch(null),
+    location: z.string().nullable().catch(null),
+    links: z.array(z.string()).catch([]),
+  }).catch({ name: null, email: null, phone: null, location: null, links: [] }),
+  summary: z.string().nullable().catch(null),
   education: z.array(
     z.object({
-      institution: z.string(),
-      degree: z.string().nullable().describe("Degree (Bachelor's/Master's/PhD, etc.)"),
-      major: z.string().nullable(),
-      period: DateRangeSchema,
-      gpa: z.string().nullable(),
+      institution: z.string().catch(""),
+      degree: z.string().nullable().catch(null),
+      major: z.string().nullable().catch(null),
+      period: DateRangeSchema.catch({ start: "", end: null }),
+      gpa: z.string().nullable().catch(null),
     })
-  ),
+  ).catch([]),
   skills: z.object({
-    languages: z.array(z.string()).describe("Programming languages"),
-    frameworks: z.array(z.string()),
-    tools: z.array(z.string()).describe("DevOps, Cloud, DB, etc."),
-    others: z.array(z.string()).describe("Other skills / Certifications / Languages"),
-  }),
+    languages: z.array(z.string()).catch([]),
+    frameworks: z.array(z.string()).catch([]),
+    tools: z.array(z.string()).catch([]),
+    others: z.array(z.string()).catch([]),
+  }).catch({ languages: [], frameworks: [], tools: [], others: [] }),
   experience: z.array(
     z.object({
-      company: z.string(),
-      title: z.string().describe("Title / Position"),
-      period: DateRangeSchema,
-      location: z.string().nullable(),
-      description: z.string().nullable().describe("Role summary"),
-      achievements: z.array(z.string()).describe("Key achievements and work bullet points"),
+      company: z.string().catch(""),
+      title: z.string().catch(""),
+      period: DateRangeSchema.catch({ start: "", end: null }),
+      location: z.string().nullable().catch(null),
+      description: z.string().nullable().catch(null),
+      achievements: z.array(z.string()).catch([]),
     })
-  ),
+  ).catch([]),
   projects: z.array(
     z.object({
-      name: z.string(),
-      period: DateRangeSchema.nullable(),
-      role: z.string().nullable(),
-      tech_stack: z.array(z.string()),
-      description: z.string().nullable(),
-      achievements: z.array(z.string()),
-      url: z.string().nullable(),
+      name: z.string().catch(""),
+      period: DateRangeSchema.nullable().catch(null),
+      role: z.string().nullable().catch(null),
+      tech_stack: z.array(z.string()).catch([]),
+      description: z.string().nullable().catch(null),
+      achievements: z.array(z.string()).catch([]),
+      url: z.string().nullable().catch(null),
     })
-  ),
+  ).catch([]),
   certifications: z.array(
     z.object({
-      name: z.string(),
-      issuer: z.string().nullable(),
-      date: z.string().nullable(),
+      name: z.string().catch(""),
+      issuer: z.string().nullable().catch(null),
+      date: z.string().nullable().catch(null),
     })
-  ),
+  ).catch([]),
   languages: z.array(
     z.object({
-      language: z.string(),
-      proficiency: z.string().nullable().describe("e.g., Native, Fluent, TOEIC 900"),
+      language: z.string().catch(""),
+      proficiency: z.string().nullable().catch(null),
     })
-  ),
-  raw_text: z.string().describe("Original text before parsing (for debugging)"),
+  ).catch([]),
+  raw_text: z.string(),
 });
 
 type ResumeJson = z.infer<typeof ResumeJsonSchema>;
@@ -157,7 +157,7 @@ ${rawText.slice(0, 10000)}`;
           // If parsing fails, try to escape literal newlines within strings
           try {
             // Regex that matches strings starting after :, [, or , and handles multi-line content without ES2018 flags
-            const escapedResponse = cleanedResponse.replace(/([:[,])\s*"([\s\S]*?[^\\])"/g, (match, prefix, content) => {
+            const escapedResponse = cleanedResponse.replace(/([:[,])\s*"([\s\S]*?[^\\])"/g, (_match, prefix, content) => {
               return prefix + ' "' + content.replace(/\n/g, "\\n").replace(/\r/g, "\\r") + '"';
             });
             parsed = JSON.parse(escapedResponse);
