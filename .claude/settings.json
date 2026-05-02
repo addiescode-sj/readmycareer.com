@@ -27,7 +27,8 @@
       "Bash(gh release create v0.2.0 --title v0.2.0 --notes ' *)",
       "Bash(git reset *)",
       "Bash(git restore *)",
-      "Bash(grep -E \"\\\\.\\(sql|ts|json\\)$\")"
+      "Bash(grep -E \"\\\\.\\(sql|ts|json\\)$\")",
+      "Bash(gh release *)"
     ],
     "additionalDirectories": [
       "/tmp",
