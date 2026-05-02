@@ -9,7 +9,7 @@ const AnalyzeSchema = z.object({
   targetRole: z.string().min(1).max(200),
   targetCompany: z.string().max(200).default(""),
   jdText: z.string().min(50).max(10000),
-  durationWeeks: z.number().int().min(1).max(52),
+  durationWeeks: z.number().int().min(1).max(24),
   startDate: z.string().min(1).max(30),
 });
 

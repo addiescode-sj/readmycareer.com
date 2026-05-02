@@ -39,14 +39,11 @@
     "jdTextValidationError": "채용 공고를 입력해주세요 (최소 50자).",
     "jdTextTooLongError": "채용 공고가 너무 깁니다 (최대 10,000자).",
     "durationLabel": "준비 기간",
+    "durationHint": "1주 ~ 24주 사이의 숫자를 입력하세요.",
+    "durationPlaceholder": "예: 8",
+    "durationUnit": "주",
+    "durationValidationError": "준비 기간을 입력해주세요 (1~24주).",
     "startDateLabel": "시작일",
-    "durations": {
-      "1month": "1개월",
-      "2months": "2개월",
-      "3months": "3개월",
-      "4months": "4개월",
-      "6months": "6개월"
-    },
     "preparingAnalysis": "분석 준비 중...",
     "analysisComplete": "완료!",
     "progress": {

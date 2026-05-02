@@ -14,14 +14,6 @@ interface Props {
   ) => void;
 }
 
-const DURATION_OPTIONS = [
-  { weeks: 4,  labelKey: "1month"  as const },
-  { weeks: 8,  labelKey: "2months" as const },
-  { weeks: 12, labelKey: "3months" as const },
-  { weeks: 16, labelKey: "4months" as const },
-  { weeks: 24, labelKey: "6months" as const },
-];
-
 const JD_TEXT_MIN_LENGTH = 50;
 const JD_TEXT_MAX_LENGTH = 10000;
 
@@ -30,7 +22,7 @@ export default function GoalSetting({ resumeJson, onAnalyzed }: Props) {
   const [targetRole, setTargetRole] = useState("");
   const [targetCompany, setTargetCompany] = useState("");
   const [jdText, setJdText] = useState("");
-  const [durationWeeks, setDurationWeeks] = useState(8);
+  const [durationWeeks, setDurationWeeks] = useState<number | "">(8);
   const [startDate, setStartDate] = useState(
     new Date().toISOString().split("T")[0] ?? ""
   );
@@ -41,6 +33,10 @@ export default function GoalSetting({ resumeJson, onAnalyzed }: Props) {
   async function handleAnalyze() {
     if (!targetRole.trim()) {
       setError(t("validationError"));
+      return;
+    }
+    if (durationWeeks === "" || durationWeeks < 1 || durationWeeks > 24) {
+      setError(t("durationValidationError"));
       return;
     }
     if (jdText.trim().length < JD_TEXT_MIN_LENGTH) {
@@ -65,7 +61,7 @@ export default function GoalSetting({ resumeJson, onAnalyzed }: Props) {
           targetRole,
           targetCompany,
           jdText,
-          durationWeeks,
+          durationWeeks: durationWeeks as number,
           startDate,
         }),
       });
@@ -179,23 +175,24 @@ export default function GoalSetting({ resumeJson, onAnalyzed }: Props) {
 
         {/* Preparation duration */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             {t("durationLabel")}
           </label>
-          <div className="flex gap-2 flex-wrap">
-            {DURATION_OPTIONS.map(({ weeks, labelKey }) => (
-              <button
-                key={weeks}
-                onClick={() => setDurationWeeks(weeks)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                  durationWeeks === weeks
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-600 border-gray-300 hover:border-blue-400"
-                }`}
-              >
-                {t(`durations.${labelKey}`)}
-              </button>
-            ))}
+          <p className="text-xs text-gray-400 mb-1">{t("durationHint")}</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={24}
+              value={durationWeeks}
+              onChange={(e) => {
+                const v = e.target.value;
+                setDurationWeeks(v === "" ? "" : Number(v));
+              }}
+              placeholder={t("durationPlaceholder")}
+              className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none text-[#333333]"
+            />
+            <span className="text-sm text-gray-500">{t("durationUnit")}</span>
           </div>
         </div>
 

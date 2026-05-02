@@ -39,14 +39,11 @@
     "jdTextValidationError": "Please paste the job description (minimum 50 characters).",
     "jdTextTooLongError": "Job description is too long (maximum 10,000 characters).",
     "durationLabel": "Preparation Period",
+    "durationHint": "Enter a number between 1 and 24 weeks.",
+    "durationPlaceholder": "e.g. 8",
+    "durationUnit": "weeks",
+    "durationValidationError": "Please enter a valid preparation period (1–24 weeks).",
     "startDateLabel": "Start Date",
-    "durations": {
-      "1month": "1 month",
-      "2months": "2 months",
-      "3months": "3 months",
-      "4months": "4 months",
-      "6months": "6 months"
-    },
     "preparingAnalysis": "Preparing analysis...",
     "analysisComplete": "Done!",
     "progress": {
