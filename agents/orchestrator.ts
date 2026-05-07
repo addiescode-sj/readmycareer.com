@@ -124,10 +124,22 @@ interface CallGeminiOptions {
   userPrompt: string;
   cachedContentName?: string | null;
   maxOutputTokens?: number;
+  temperature?: number;
+  topP?: number;
 }
 
 async function callGemini(opts: CallGeminiOptions): Promise<string | null> {
-  const { apiKey, systemInstruction, userPrompt, cachedContentName, maxOutputTokens = 8192 } = opts;
+  const {
+    apiKey,
+    systemInstruction,
+    userPrompt,
+    cachedContentName,
+    maxOutputTokens = 8192,
+    // Low temperature: prevents the model from dropping confirmed skill matches.
+    // topP 0.85: retains semantic flexibility for abbreviation/synonym matching.
+    temperature = 0.2,
+    topP = 0.85,
+  } = opts;
   const genai = new GoogleGenerativeAI(apiKey);
 
   for (let attempt = 0; attempt < MAX_API_RETRIES; attempt++) {
@@ -143,6 +155,8 @@ async function callGemini(opts: CallGeminiOptions): Promise<string | null> {
           generationConfig: {
             responseMimeType: "application/json",
             maxOutputTokens,
+            temperature,
+            topP,
           },
         } as any);
       } else {
@@ -155,6 +169,8 @@ async function callGemini(opts: CallGeminiOptions): Promise<string | null> {
           generationConfig: {
             responseMimeType: "application/json",
             maxOutputTokens,
+            temperature,
+            topP,
           },
         });
       }
@@ -447,24 +463,35 @@ export async function runCareerAnalysis(
 
   const gapAnalysisData = await runWithQualityGate<any>(
     (retryFeedback) => {
+      // When no cache is available, include the full resume JSON inline so the model
+      // always has the data it needs. With a cache, the resume is already in context.
+      const resumeSection = gapCacheName
+        ? "(Resume JSON is included in the context cache above — use it for all phase comparisons.)"
+        : `## Resume JSON (use this for all phase comparisons):
+${JSON.stringify(resumeForAnalysis, null, 2)}`;
+
       const prompt = `
-Analyze the gap between the target company/role, the job description below, and the resume (included in cache).
-Output JSON only.
+Follow ALL 8 phases in your instruction exactly. Work through each phase in order.
+Do NOT skip Phase 3 (Skill-Level Matching) — iterate over EVERY item in JD_REQUIRED and JD_PREFERRED.
+Output JSON only — no markdown, no prose.
 
 ## User-Specified Target (do NOT change)
 - target_company: ${targetCompany}
 - target_role: ${targetRole}
 
-⚠️ The "target_role" field in the output JSON MUST use the value "${targetRole}" above.
-⚠️ All gap analysis, strengths, and weaknesses must be evaluated in the context of the above target company/role.
+⚠️ The "target_role" field in the output JSON MUST be "${targetRole}".
+⚠️ Evaluate ALL strengths and gaps in the context of the above target company/role.
+⚠️ A skill that appears in BOTH the resume AND the JD MUST be listed in strengths[]. Never omit confirmed matches.
 
-## Required fields:
-"target_role"(string), "strengths"(array), "gaps"(array, at least 1 required),
-"priority_order"(array), "overall_match_score"(0-100 number), "summary"(string)
+## Required output fields:
+"target_role"(string), "strengths"(array), "gaps"(array, ≥1 item),
+"priority_order"(array), "overall_match_score"(0–100 integer), "summary"(string)
 
 ## Valid value constraints:
-- category: MUST be one of {"skill", "experience", "certification", "portfolio", "keyword"}
-- priority: MUST be one of {"high", "medium", "low"} in lowercase
+- category: exactly one of {"skill", "experience", "certification", "portfolio", "keyword"}
+- priority: exactly one of {"high", "medium", "low"} in lowercase
+
+${resumeSection}
 
 ## Job Description:
 ${jdText}
@@ -478,6 +505,8 @@ ${retryFeedback}
         userPrompt: prompt,
         cachedContentName: gapCacheName,
         maxOutputTokens: 8192,
+        temperature: 0.2,
+        topP: 0.85,
       });
     },
     validateGapAnalysis,
