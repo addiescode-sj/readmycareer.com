@@ -1,9 +1,7 @@
 "use client";
 
-import ResumeUpload from "@/components/ResumeUpload";
-import { useSession } from "@/hooks/useSession";
+import InitializeWorkspace from "@/components/InitializeWorkspace";
 
 export default function UploadSlot() {
-  const { setResumeJson } = useSession();
-  return <ResumeUpload onParsed={setResumeJson} />;
+  return <InitializeWorkspace />;
 }
