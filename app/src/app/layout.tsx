@@ -6,6 +6,8 @@ import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import { SessionLayout } from "@/components/SessionLayout";
 import { AuthListener } from "@/components/AuthListener";
+import ParticleNetwork from "@/components/ui/ParticleNetwork";
+import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
   title: "readmycareer.com — AI Career Coach",
@@ -30,16 +32,27 @@ export default async function RootLayout({
   const headersList = await headers();
   const pathname = headersList.get("x-pathname") ?? "/";
   const isDashboard = pathname.startsWith("/dashboard");
+  const isLanding = pathname === "/";
 
   return (
     <html lang={locale}>
-      <body className="min-h-screen bg-gray-50">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+      </head>
+      <body className="min-h-screen bg-background font-sans antialiased">
         <NextIntlClientProvider messages={messages}>
           <AuthListener />
-          {isDashboard ? (
-            children
+          <ParticleNetwork />
+          <Toaster position="top-center" richColors />
+          {isDashboard || isLanding ? (
+            <div className="relative z-10">
+              {children}
+            </div>
           ) : (
-            <SessionLayout upload={upload} goal={goal} plan={plan} chat={chat} />
+            <div className="relative z-10">
+              <SessionLayout upload={upload} goal={goal} plan={plan} chat={chat} />
+            </div>
           )}
         </NextIntlClientProvider>
       </body>

@@ -33,6 +33,7 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-pathname", pathname);
+  requestHeaders.set("x-url", req.url);
 
   // Initialize response
   let res = NextResponse.next({ request: { headers: requestHeaders } });

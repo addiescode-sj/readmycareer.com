@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/hooks/useSession";
+import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface TodoItem {
   id: string;
@@ -39,14 +41,10 @@ interface Props {
   onStartChat: () => void;
   onTodoToggle: (weekNumber: number, todoId: string, done: boolean) => void;
   hideSaveBanner?: boolean;
+  hideChat?: boolean;
 }
 
-const MILESTONES: [number, string][] = [
-  [30,  "30% 달성! 잘하고 있어요 👏"],
-  [60,  "60% 완료! 절반 넘었어요 💪"],
-  [90,  "90% 달성! 거의 다 왔어요 🔥"],
-  [100, "완주! 대단해요! 🏆"],
-];
+// MILESTONES moved inside RunnerTrack to use t() hook
 
 function RunnerCharacter({ isRunning }: { isRunning: boolean }) {
   const dur = "0.38s";
@@ -156,107 +154,75 @@ function RunnerCharacter({ isRunning }: { isRunning: boolean }) {
   );
 }
 
-function RunnerTrack({
-  progress,
-  completedCount,
-  totalCount,
-}: {
-  progress: number;
-  completedCount: number;
-  totalCount: number;
+interface WeekStat {
+  week_number: number;
+  theme: string;
+  done: number;
+  total: number;
+  pct: number;
+}
+
+function WeekProgressBar({ weeks, overallPct }: {
+  weeks: WeekStat[];
+  overallPct: number;
 }) {
-  const prevRef = useRef(progress);
-  const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    const prev = prevRef.current;
-    for (const [m, label] of MILESTONES) {
-      if (prev < m && progress >= m) {
-        setMilestoneMsg(label);
-        const t = setTimeout(() => setMilestoneMsg(null), 3000);
-        prevRef.current = progress;
-        return () => clearTimeout(t);
-      }
-    }
-    prevRef.current = progress;
-  }, [progress]);
-
-  // Clamp so runner stays visible within the track
-  const runnerLeft = Math.min(93, Math.max(0, progress));
-  const isRunning = progress > 0 && progress < 100;
-  const isDone = progress >= 100;
+  const t = useTranslations("RoadmapView");
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">전체 진행률</span>
-          <span className="text-xs text-gray-400 tabular-nums">({completedCount}/{totalCount} 완료)</span>
-        </div>
-        <span className="text-xs font-semibold text-gray-700 tabular-nums">{progress}%</span>
-      </div>
-
-      {/* Milestone celebration */}
-      {milestoneMsg && (
-        <div className="text-center text-xs font-bold text-yellow-800 bg-yellow-100 border border-yellow-200 rounded-lg py-1.5 mb-2 animate-bounce">
-          {milestoneMsg}
-        </div>
-      )}
-
-      {/* Track container */}
-      <div
-        className="relative rounded-xl overflow-hidden select-none"
-        style={{ height: "62px", background: "#F8FAFC" }}
-      >
-        {/* Completed fill */}
-        <div
-          className="absolute inset-y-0 left-0 transition-all duration-700"
-          style={{
-            width: `${progress}%`,
-            background: isDone
-              ? "linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%)"
-              : "linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%)",
-          }}
-        />
-
-        {/* Ground */}
-        <div className="absolute bottom-3 left-0 right-0 h-px bg-gray-300" />
-
-        {/* Dashed path ahead of runner */}
-        <div
-          className="absolute bottom-3 right-0 h-px"
-          style={{
-            left: `${progress}%`,
-            background:
-              "repeating-linear-gradient(90deg, #D1D5DB 0px, #D1D5DB 6px, transparent 6px, transparent 12px)",
-          }}
-        />
-
-        {/* Milestone notches at 30 / 60 / 90 */}
-        {[30, 60, 90].map((m) => (
-          <div
-            key={m}
-            className="absolute flex flex-col items-center pointer-events-none"
-            style={{ left: `${m}%`, bottom: "3px", transform: "translateX(-50%)" }}
-          >
-            <div className="w-px h-3 bg-gray-400/50" />
+    <div className="space-y-6">
+      {/* Per-week segmented bars */}
+      <div className="flex gap-3">
+        {weeks.map((w, i) => (
+          <div key={w.week_number} className="flex-1 min-w-0 flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className={cn(
+                "text-[9px] font-black uppercase tracking-widest",
+                w.pct === 100 ? "text-primary" : "text-muted-foreground"
+              )}>
+                W{w.week_number}
+              </span>
+              {w.pct > 0 && (
+                <span className="text-[9px] font-black text-primary">{w.pct}%</span>
+              )}
+            </div>
+            <div className="h-2.5 rounded-full bg-surface-container overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${w.pct}%` }}
+                transition={{ duration: 0.8, delay: i * 0.08, ease: "easeOut" }}
+                className={cn(
+                  "h-full rounded-full",
+                  w.pct === 100
+                    ? "bg-primary shadow-[0_0_8px_rgba(107,56,212,0.5)]"
+                    : w.pct > 0
+                    ? "bg-gradient-to-r from-primary/50 to-primary"
+                    : ""
+                )}
+              />
+            </div>
+            <p className="text-[9px] font-semibold text-muted-foreground/60 truncate leading-none">
+              {w.theme.split(" ").slice(0, 3).join(" ")}
+            </p>
           </div>
         ))}
+      </div>
 
-        {/* Finish flag */}
-        <div className="absolute right-2 bottom-3 text-base leading-none" style={{ transform: "translateY(-2px)" }}>
-          {isDone ? "🏆" : "🏁"}
+      {/* Overall completion row */}
+      <div className="flex items-center justify-between pt-3 border-t border-border/30">
+        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+          {t("architecturalCompletion")}
+        </span>
+        <div className="flex items-center gap-3">
+          <div className="w-28 h-1.5 rounded-full bg-surface-container overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-primary via-secondary to-tertiary transition-all duration-1000"
+              style={{ width: `${overallPct}%` }}
+            />
+          </div>
+          <span className="text-2xl font-black tracking-tighter text-primary tabular-nums">
+            {overallPct}%
+          </span>
         </div>
-
-        {/* Runner */}
-        <div
-          className="absolute bottom-3 transition-all duration-1000 ease-in-out"
-          style={{ left: `${runnerLeft}%`, transform: "translateX(-50%) translateY(-2px)" }}
-        >
-          <RunnerCharacter isRunning={isRunning} />
-        </div>
-
-
       </div>
     </div>
   );
@@ -299,6 +265,7 @@ function convertToMarkdown(typedPlan: CareerPlan): string {
 type SaveStatus = "idle" | "saving" | "saved" | "error" | "limit_reached";
 
 function SaveBanner() {
+  const t = useTranslations("RoadmapView");
   const { careerPlan, gapAnalysis, targetRole, targetCompany, jdText } = useSession();
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -401,7 +368,7 @@ function SaveBanner() {
     return (
       <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-2xl px-6 py-4">
         <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
-        <p className="text-sm text-blue-700">플랜을 저장하는 중...</p>
+        <p className="text-sm text-blue-700">{t("saving")}</p>
       </div>
     );
   }
@@ -409,12 +376,12 @@ function SaveBanner() {
   if (saveStatus === "saved") {
     return (
       <div className="flex items-center justify-between gap-4 bg-green-50 border border-green-200 rounded-2xl px-6 py-4">
-        <p className="text-sm font-medium text-green-800">✓ 플랜이 저장되었습니다!</p>
+        <p className="text-sm font-medium text-green-800">✓ {t("saved")}</p>
         <button
           onClick={() => { window.location.href = "/dashboard"; }}
           className="text-sm text-green-700 underline hover:text-green-900 bg-transparent p-0 cursor-pointer"
         >
-          대시보드에서 보기 →
+          {t("viewInDashboard")}
         </button>
       </div>
     );
@@ -424,13 +391,13 @@ function SaveBanner() {
     return (
       <div className="flex items-center justify-between gap-4 bg-yellow-50 border border-yellow-200 rounded-2xl px-6 py-4">
         <p className="text-sm text-yellow-800">
-          저장 가능한 플랜 수(3개)에 도달했습니다. 대시보드에서 기존 플랜을 삭제한 후 다시 시도해 주세요.
+          {t("quotaExceeded")}
         </p>
         <button
           onClick={() => { window.location.href = "/dashboard"; }}
           className="text-sm text-yellow-700 underline hover:text-yellow-900 whitespace-nowrap bg-transparent p-0 cursor-pointer"
         >
-          대시보드 →
+          {t("goToDashboard")}
         </button>
       </div>
     );
@@ -439,13 +406,13 @@ function SaveBanner() {
   if (saveStatus === "error") {
     return (
       <div className="flex items-center justify-between gap-4 bg-red-50 border border-red-200 rounded-2xl px-6 py-4">
-        <p className="text-sm text-red-700">플랜 저장에 실패했습니다.</p>
+        <p className="text-sm text-red-700">{t("saveFailed")}</p>
         {jdText && (
           <button
             onClick={retrySave}
             className="text-sm text-red-700 underline hover:text-red-900 whitespace-nowrap"
           >
-            다시 시도
+            {t("retry")}
           </button>
         )}
       </div>
@@ -458,10 +425,10 @@ function SaveBanner() {
       <div className="flex items-center justify-between gap-4 bg-blue-50 border border-blue-200 rounded-2xl px-6 py-4">
         <div>
           <p className="text-sm font-medium text-blue-900">
-            이 플랜을 저장하고 싶으신가요?
+            {t("savePrompt")}
           </p>
           <p className="text-xs text-blue-600 mt-0.5">
-            Google로 로그인하면 브라우저를 닫아도 플랜이 유지됩니다.
+            {t("loginToPersist")}
           </p>
         </div>
         <button
@@ -479,7 +446,7 @@ function SaveBanner() {
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
             </svg>
           )}
-          Google로 저장하기
+          {t("saveWithGoogle")}
         </button>
       </div>
     );
@@ -499,19 +466,13 @@ function initExpandedWeeks(weeks: WeekPlan[]): Set<number> {
   return expanded;
 }
 
-export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveBanner }: Props) {
+export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveBanner, hideChat }: Props) {
   const t = useTranslations("RoadmapView");
   const typedPlan = plan as unknown as CareerPlan;
   const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(() =>
     initExpandedWeeks(typedPlan.weeks ?? [])
   );
   const [copied, setCopied] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
-  }, []);
 
   async function handleCopy() {
     await navigator.clipboard.writeText(convertToMarkdown(typedPlan));
@@ -521,7 +482,7 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
 
   if (!typedPlan.weeks?.length) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center text-gray-500">
+      <div className="glass-card rounded-2xl p-8 text-center text-muted-foreground">
         {t("noData")}
       </div>
     );
@@ -542,65 +503,81 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
     : 0;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-10">
       {!hideSaveBanner && <SaveBanner />}
 
       {/* Summary card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">
-              {typedPlan.target_jd_title ?? t("defaultTitle")}
-            </h2>
-            <p className="text-sm text-gray-500 mt-4 w-full">{typedPlan.summary}</p>
+      <div className="glass-card rounded-[40px] p-10 shadow-2xl shadow-primary/5">
+        <div className="flex flex-col lg:flex-row items-start justify-between gap-8 mb-12">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-2 h-8 bg-primary rounded-full shadow-[0_0_10px_rgba(139,92,246,0.5)]" />
+              <h2 className="text-3xl font-black tracking-tight text-foreground">
+                {typedPlan.target_jd_title ?? t("defaultTitle")}
+              </h2>
+            </div>
+            <p className="text-sm font-medium text-muted-foreground leading-relaxed max-w-2xl">{typedPlan.summary}</p>
           </div>
-          <div className="flex gap-2">
-            {isLoggedIn && !hideSaveBanner && (
-              <button
-                onClick={() => { window.location.href = "/dashboard"; }}
-                className="px-4 py-2 border border-blue-200 bg-blue-50 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer"
-              >
-                📊 대시보드로 돌아가기
-              </button>
-            )}
+          
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={handleCopy}
-              className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap"
+              className="px-6 py-3 border border-border bg-background text-foreground font-bold text-sm rounded-2xl hover:bg-muted transition-all"
             >
               {copied ? t("copied") : t("copyMarkdown")}
             </button>
-            <button
-              onClick={onStartChat}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
-            >
-              {t("chatButton")}
-            </button>
+            {!hideChat && (
+              <button
+                onClick={onStartChat}
+                className="px-6 py-3 bg-primary text-primary-foreground font-bold text-sm rounded-2xl hover:opacity-90 transition-all shadow-xl shadow-primary/20"
+              >
+                {t("chatButton")}
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="flex gap-4 text-sm text-gray-600 mb-4">
-          <span>📅 {typedPlan.start_date} ~ {typedPlan.end_date}</span>
-          <span>📋 {typedPlan.duration_weeks}{t("weeksUnit")}</span>
+        <div className="flex flex-wrap gap-6 text-xs font-black uppercase tracking-widest text-primary/60 mb-12">
+          <span className="flex items-center gap-2">
+            <span className="opacity-50">{t("timeline")}:</span>
+            {typedPlan.start_date} — {typedPlan.end_date}
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="opacity-50">{t("duration")}:</span>
+            {typedPlan.duration_weeks} {t("cyclesUnit")}
+          </span>
         </div>
 
-        {/* Runner progress track */}
-        <RunnerTrack
-          progress={progressPercentage}
-          completedCount={completedTodosCount}
-          totalCount={totalTodosCount}
+        {/* Per-week progress */}
+        <WeekProgressBar
+          weeks={typedPlan.weeks.map((w) => {
+            const done = w.todos.filter((todo) => String(todo.done) === "true").length;
+            const total = w.todos.length;
+            return {
+              week_number: w.week_number,
+              theme: w.theme,
+              done,
+              total,
+              pct: total > 0 ? Math.round((done / total) * 100) : 0,
+            };
+          })}
+          overallPct={progressPercentage}
         />
       </div>
 
-      {/* Weekly plan */}
-      <div className="flex flex-col gap-3">
+      {/* Weekly protocol */}
+      <div className="grid grid-cols-1 gap-6">
         {typedPlan.weeks.map((week) => (
           <div
             key={week.week_number}
-            className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden"
+            className={cn(
+              "glass-card rounded-[32px] overflow-hidden transition-all duration-500",
+              expandedWeeks.has(week.week_number) ? "ring-2 ring-primary/20 shadow-2xl" : "opacity-80"
+            )}
           >
             {/* Week header */}
             <button
-              className="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center justify-between p-8 text-left hover:bg-primary/5 transition-colors group"
               onClick={() =>
                 setExpandedWeeks((prev) => {
                   const next = new Set(prev);
@@ -613,61 +590,95 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
                 })
               }
             >
-              <div className="flex items-center gap-3">
-                <span className="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-sm font-bold">
+              <div className="flex items-center gap-6">
+                <div className={cn(
+                  "w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black transition-all",
+                  expandedWeeks.has(week.week_number) ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" : "bg-muted text-muted-foreground"
+                )}>
                   {week.week_number}
-                </span>
+                </div>
                 <div>
-                  <p className="font-medium text-gray-900">{week.theme}</p>
-                  <p className="text-xs text-gray-400">
-                    {week.date_range.start} ~ {week.date_range.end}
-                    {week.milestone && ` · 🏁 ${week.milestone}`}
-                  </p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary mb-1">{t("cycleLabel", { n: week.week_number })}</p>
+                  <p className="text-xl font-black tracking-tight text-foreground group-hover:text-primary transition-colors">{week.theme}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">{t("todoCount", { count: week.todos.length })}</span>
-                <span className="text-gray-400">
-                  {expandedWeeks.has(week.week_number) ? "▲" : "▼"}
-                </span>
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{t("protocolsCount", { count: week.todos.length })}</p>
+                  <p className="text-[9px] font-bold text-primary mt-1">{week.milestone || t("defaultMilestone")}</p>
+                </div>
+                <div className={cn(
+                  "w-8 h-8 rounded-full border border-border flex items-center justify-center transition-transform",
+                  expandedWeeks.has(week.week_number) ? "rotate-180" : ""
+                )}>
+                  ▼
+                </div>
               </div>
             </button>
 
             {/* Todo list */}
-            {expandedWeeks.has(week.week_number) && (
-              <div className="border-t border-gray-100 px-5 pb-4">
-                {week.todos.map((todo) => (
-                  <div key={todo.id} className="py-3 border-b border-gray-50 last:border-0">
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={todo.done}
-                        onChange={(e) => onTodoToggle(week.week_number, todo.id, e.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-gray-900">
-                            {todo.title}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${PRIORITY_BADGE[todo.priority]}`}
-                          >
-                            {todo.priority}
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            ~{todo.estimated_hours}h
-                          </span>
-                        </div>
-                        {todo.description && (
-                          <p className="text-xs text-gray-500 mt-1">{todo.description}</p>
+            <AnimatePresence>
+              {expandedWeeks.has(week.week_number) && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-8 pb-8 pt-2 space-y-4">
+                    {week.todos.map((todo) => (
+                      <div 
+                        key={todo.id} 
+                        className={cn(
+                          "group/item p-6 rounded-2xl border transition-all",
+                          todo.done ? "bg-primary/5 border-primary/20 opacity-60" : "bg-background border-border hover:border-primary/30"
                         )}
+                      >
+                        <div className="flex items-start gap-6">
+                          <label className="relative flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={todo.done}
+                              onChange={(e) => onTodoToggle(week.week_number, todo.id, e.target.checked)}
+                              className="peer sr-only"
+                            />
+                            <div className="w-6 h-6 border-2 border-muted-foreground/30 rounded-lg peer-checked:bg-primary peer-checked:border-primary transition-all shadow-sm" />
+                            <div className="absolute inset-0 flex items-center justify-center text-white opacity-0 peer-checked:opacity-100 transition-opacity">
+                              ✓
+                            </div>
+                          </label>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-4 mb-2">
+                              <h4 className={cn(
+                                "font-bold text-foreground transition-all",
+                                todo.done ? "line-through text-muted-foreground" : "text-lg"
+                              )}>
+                                {todo.title}
+                              </h4>
+                              <div className="flex items-center gap-3">
+                                <span className={cn(
+                                  "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border",
+                                  todo.priority === "high" ? "bg-destructive/10 text-destructive border-destructive/20" : "bg-muted text-muted-foreground border-border"
+                                )}>
+                                  {todo.priority}
+                                </span>
+                                <span className="text-[10px] font-black text-muted-foreground uppercase tabular-nums">
+                                  {todo.estimated_hours}h
+                                </span>
+                              </div>
+                            </div>
+                            {todo.description && (
+                              <p className="text-sm font-medium text-muted-foreground leading-relaxed">{todo.description}</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         ))}
       </div>

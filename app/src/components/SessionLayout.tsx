@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 import { SessionProvider, useSession } from "@/hooks/useSession";
 import FloatingChat from "@/components/FloatingChat";
 import { createClient } from "@/lib/supabase/client";
@@ -37,33 +37,10 @@ function StepRouter({ upload, goal, plan }: Omit<SlotProps, "chat">) {
 
   return (
     <>
-      {/* Step indicator */}
-      <div className="flex gap-2 mb-8">
-        {STEPS.map(({ key, label }, i) => (
-          <div
-            key={key}
-            className={`flex items-center gap-2 text-sm ${step === key ? "text-blue-600 font-semibold" : "text-gray-400"
-              }`}
-          >
-            <span
-              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border-2 ${step === key
-                  ? "border-blue-600 bg-blue-600 text-white"
-                  : i < stepIndex
-                    ? "border-blue-300 bg-blue-100 text-blue-400"
-                    : "border-gray-300 text-gray-400"
-                }`}
-            >
-              {i + 1}
-            </span>
-            <span className="hidden sm:inline">{label}</span>
-            {i < 2 && <span className="text-gray-300 mx-1">›</span>}
-          </div>
-        ))}
-      </div>
+      {/* Step indicator removed for new unified onboarding layout */}
 
-      {/* Render only the current step */}
+      {/* Render the unified initialize workspace or the plan */}
       {step === "upload" && upload}
-      {step === "goal" && goal}
       {step === "plan" && plan}
 
       {/* Floating chat on the career plan step */}
@@ -83,12 +60,14 @@ function WelcomeBackOverlay({
   onDismiss: () => void;
   isLoggedIn: boolean;
 }) {
+  const t = useTranslations("ReturningUserGate");
+  const locale = useLocale();
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
   const formattedDate = lastLoginAt
-    ? new Intl.DateTimeFormat("ko-KR", {
+    ? new Intl.DateTimeFormat(locale, {
         year: "numeric",
         month: "long",
         day: "numeric",
@@ -113,7 +92,7 @@ function WelcomeBackOverlay({
       
       if (error) {
         console.error("OAuth error:", error);
-        alert(`로그인 중 오류가 발생했습니다: ${error.message}`);
+        alert(t("loginError", { message: error.message }));
         setLoading(false);
       }
     }
@@ -122,10 +101,10 @@ function WelcomeBackOverlay({
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-8 py-10 max-w-sm w-full">
-        <h2 className="text-xl font-bold text-gray-900 mb-2">로그인 하시겠습니까?</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">{t("title")}</h2>
         {formattedDate && (
           <p className="text-sm text-gray-500 mb-6">
-            최근 로그인: {formattedDate}
+            {t("lastLogin", { date: formattedDate })}
           </p>
         )}
 
@@ -137,7 +116,7 @@ function WelcomeBackOverlay({
           {loading ? (
             <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
           ) : isLoggedIn ? (
-            <span className="font-semibold text-blue-600">대시보드로 이동</span>
+            <span className="font-semibold text-blue-600">{t("goDashboard")}</span>
           ) : (
             <>
               <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
@@ -146,7 +125,7 @@ function WelcomeBackOverlay({
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
               </svg>
-              <span>Google로 로그인</span>
+              <span>{t("loginGoogle")}</span>
             </>
           )}
         </button>
@@ -155,7 +134,7 @@ function WelcomeBackOverlay({
           onClick={onDismiss}
           className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
         >
-          로그인 없이 계속하기
+          {t("continueGuest")}
         </button>
       </div>
     </div>
@@ -217,16 +196,28 @@ export function SessionLayout({ upload, goal, plan, chat }: SlotProps) {
   const t = useTranslations("SessionLayout");
 
   return (
-    <main className="container mx-auto max-w-4xl px-4 py-8">
+    <main className="container mx-auto px-4 py-8">
       <SessionProvider>
+        <ReturningUserGate>
+          <SessionLayoutInner t={t} upload={upload} goal={goal} plan={plan} chat={chat} />
+        </ReturningUserGate>
+      </SessionProvider>
+    </main>
+  );
+}
+
+function SessionLayoutInner({ t, upload, goal, plan }: SlotProps & { t: any }) {
+  const { step } = useSession();
+  
+  return (
+    <div className={step === "plan" ? "max-w-4xl mx-auto" : "max-w-7xl mx-auto"}>
+      {step === "plan" && (
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">{t("title")}</h1>
           <p className="mt-1 text-gray-500">{t("subtitle")}</p>
         </div>
-        <ReturningUserGate>
-          <StepRouter upload={upload} goal={goal} plan={plan} />
-        </ReturningUserGate>
-      </SessionProvider>
-    </main>
+      )}
+      <StepRouter upload={upload} goal={goal} plan={plan} />
+    </div>
   );
 }

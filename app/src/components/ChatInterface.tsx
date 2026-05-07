@@ -134,39 +134,41 @@ export default function ChatInterface({
       const decoder = new TextDecoder();
       let assistantText = "";
       let streamDone = false;
+      let buffer = "";
+
+      const processLine = (line: string) => {
+        if (!line.startsWith("data: ")) return;
+        const payload = line.slice(6).trim();
+        if (payload === "[DONE]") { streamDone = true; return; }
+
+        try {
+          const parsed = JSON.parse(payload) as { text?: string; error?: string };
+          if (parsed.error) throw new Error(parsed.error);
+          if (parsed.text) {
+            assistantText += parsed.text;
+            setMessages((prev) => [
+              ...prev.slice(0, -1),
+              { role: "assistant", content: assistantText },
+            ]);
+          }
+        } catch (parseErr) {
+          if (!(parseErr instanceof SyntaxError)) throw parseErr;
+        }
+      };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const lines = decoder.decode(value).split("\n");
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const payload = line.slice(6).trim();
-          if (payload === "[DONE]") { streamDone = true; break; }
-
-          try {
-            const parsed = JSON.parse(payload) as { text?: string; error?: string };
-            if (parsed.error) {
-              throw new Error(parsed.error);
-            }
-            if (parsed.text) {
-              assistantText += parsed.text;
-              setMessages((prev) => [
-                ...prev.slice(0, -1),
-                { role: "assistant", content: assistantText },
-              ]);
-            }
-          } catch (parseErr) {
-            if (parseErr instanceof SyntaxError) {
-              // Ignore JSON parse failures
-            } else {
-              throw parseErr; // Propagate server errors to the outer catch
-            }
-          }
-        }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) processLine(line);
         if (streamDone) break;
       }
+
+      // Flush any remaining buffered content
+      if (buffer.trim()) processLine(buffer.trim());
 
       // Replace placeholder with error message if no content was streamed
       if (!assistantText) {
@@ -202,7 +204,7 @@ export default function ChatInterface({
   return (
     <div className={compact ? "flex flex-col h-full" : "flex flex-col gap-4"}>
       {/* Chat area */}
-      <div className={compact ? "flex flex-col flex-1 overflow-hidden" : "bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col h-[500px]"}>
+      <div className={compact ? "flex flex-col flex-1 overflow-hidden" : "glass-card rounded-2xl flex flex-col h-[500px]"}>
         {/* Message list */}
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
           {messages.map((msg, i) => (
@@ -212,8 +214,8 @@ export default function ChatInterface({
             >
               <div
                 className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${msg.role === "user"
-                    ? "bg-blue-600 text-white rounded-br-sm"
-                    : "bg-gray-100 text-gray-900 rounded-bl-sm"
+                    ? "bg-primary text-primary-foreground rounded-br-sm"
+                    : "bg-muted text-foreground rounded-bl-sm"
                   }`}
               >
                 {msg.role === "assistant" ? (
@@ -227,9 +229,9 @@ export default function ChatInterface({
                       </ReactMarkdown>
                     ) : (
                       <span className="inline-flex gap-1">
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
+                        <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                        <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                        <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce" />
                       </span>
                     )}
                   </div>
@@ -243,7 +245,7 @@ export default function ChatInterface({
         </div>
 
         {/* Input area */}
-        <div className="border-t border-gray-100 p-4">
+        <div className="border-t border-border/50 p-4">
           <div className="flex gap-2">
             <textarea
               ref={textareaRef}
@@ -257,13 +259,13 @@ export default function ChatInterface({
               }}
               placeholder={t("placeholder")}
               rows={2}
-              className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none text-[#333333]"
+              className="flex-1 border border-input rounded-xl px-3 py-2 text-sm resize-none bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
               disabled={isLoading}
             />
             <button
               onClick={() => sendMessage(input)}
               disabled={isLoading || !input.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors self-end"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity self-end"
             >
               {t("sendButton")}
             </button>
@@ -274,14 +276,14 @@ export default function ChatInterface({
       {/* Suggested questions */}
       {messages.length <= 2 && (
         <div className="flex flex-col gap-2 px-5 py-5">
-          <p className="text-xs text-gray-400 font-medium">{t("suggestedQuestions")}</p>
+          <p className="text-xs text-muted-foreground font-medium">{t("suggestedQuestions")}</p>
           <div className="flex flex-wrap gap-2">
             {SUGGESTED_QUESTIONS.map((q, i) => (
               <button
                 key={i}
                 onClick={() => sendMessage(q)}
                 disabled={isLoading}
-                className="px-3 py-1.5 bg-white border border-gray-200 rounded-full text-xs text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+                className="px-3 py-1.5 bg-background border border-border rounded-full text-xs text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50"
               >
                 {q}
               </button>

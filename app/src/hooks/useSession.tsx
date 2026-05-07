@@ -58,6 +58,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // Restore from sessionStorage on mount
   useEffect(() => {
     try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("new") === "true") {
+        sessionStorage.removeItem(STORAGE_KEY);
+        setIsLoaded(true);
+        return;
+      }
+    } catch {}
+
+    try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -97,7 +106,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const setResumeJson = useCallback(
     (resumeJson: Record<string, unknown>) => {
-      commit((prev) => ({ ...prev, resumeJson, step: "goal" }));
+      commit((prev) => ({ ...prev, resumeJson }));
     },
     [commit]
   );

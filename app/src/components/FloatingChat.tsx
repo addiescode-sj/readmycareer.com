@@ -24,7 +24,7 @@ export default function FloatingChat() {
     <>
       {/* Chat panel */}
       <div
-        className={`fixed bottom-6 right-6 w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col transition-all duration-300 ease-out z-50 ${
+        className={`fixed bottom-6 right-6 w-96 glass-card-elevated rounded-2xl shadow-2xl flex flex-col transition-all duration-300 ease-out z-50 gradient-border ${
           isChatOpen
             ? "opacity-100 translate-y-0 pointer-events-auto"
             : "opacity-0 translate-y-4 pointer-events-none"
@@ -32,14 +32,14 @@ export default function FloatingChat() {
         style={{ height: "520px" }}
       >
         {/* Panel header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 rounded-t-2xl bg-white">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 rounded-t-2xl bg-primary text-primary-foreground shrink-0">
           <div className="flex items-center gap-2">
-            <span className="text-lg">💬</span>
-            <span className="text-sm font-semibold text-gray-900">{t("title")}</span>
+            <span className="text-base">💬</span>
+            <span className="text-sm font-bold">{t("title")}</span>
           </div>
           <button
             onClick={closeChat}
-            className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors text-lg leading-none"
+            className="w-7 h-7 flex items-center justify-center rounded-full text-primary-foreground/70 hover:text-primary-foreground hover:bg-white/20 transition-colors text-lg leading-none"
             aria-label={t("closeLabel")}
           >
             ×
@@ -63,7 +63,7 @@ export default function FloatingChat() {
       {!isChatOpen && (
         <button
           onClick={goToChat}
-          className="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center text-2xl z-50"
+          className="fixed bottom-6 right-6 w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-xl shadow-primary/30 hover:opacity-90 active:scale-95 transition-all flex items-center justify-center text-2xl z-50 border-4 border-background"
           aria-label={t("fabLabel")}
         >
           💬
