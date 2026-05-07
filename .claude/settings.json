@@ -19,7 +19,35 @@
       "Bash(grep -E \"\\\\.\\(sql|ts|json\\)$\")",
       "Bash(gh release *)",
       "Skill(update-config)",
-      "Skill(update-config:*)"
+      "Skill(update-config:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(command -v opencode)",
+      "Bash(opencode --version)",
+      "Bash(echo \"OpenCode $\\(opencode --version\\) is installed\")",
+      "Bash(command -v bun)",
+      "Bash(bun --version)",
+      "Bash(command -v brew)",
+      "Bash(brew --version)",
+      "Bash(curl -fsSL https://opencode.ai/install)",
+      "Bash(bash)",
+      "Read(//Users/addie.lee/.npm/_logs/**)",
+      "Bash(mkdir -p ~/.npm-global)",
+      "Bash(npm config *)",
+      "Bash(npm install *)",
+      "Bash(export PATH=\"$HOME/.npm-global/bin:$PATH\")",
+      "Bash(echo 'export PATH=\"$HOME/.npm-global/bin:$PATH\"')",
+      "Bash(comment-checker --version)",
+      "Read(//Users/addie.lee/.npm-global/**)",
+      "Bash(mkdir -p ~/.npm-global/bin)",
+      "Bash(ln -sf ~/.npm-global/lib/node_modules/@code-yeongyu/comment-checker/bin/comment-checker ~/.npm-global/bin/comment-checker)",
+      "Read(//Users/addie.lee/**)",
+      "Bash(python3 -m json.tool)",
+      "WebFetch(domain:stitch.withgoogle.com)",
+      "WebSearch",
+      "Bash(curl -s -L \"https://stitch.withgoogle.com/p/7303846503161269982/s/ef10c999a0594903ad5b8d49fc490d1f\" -o /tmp/stitch_roadmap.html)",
+      "Bash(curl -s -L \"https://stitch.withgoogle.com/api/v1/projects/7303846503161269982/screens/ef10c999a0594903ad5b8d49fc490d1f\" -o /tmp/stitch_api_roadmap.json)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('mcpServers', {}\\), indent=2\\)\\)\")",
+      "Bash(grep -E \"\\\\.tsx$\")"
     ],
     "additionalDirectories": [
       "/tmp",
@@ -28,7 +56,8 @@
     ]
   },
   "enabledMcpjsonServers": [
-    "supabase"
+    "supabase",
+    "stitch"
   ],
   "enabledPlugins": {
     "pinecone@claude-plugins-official": true

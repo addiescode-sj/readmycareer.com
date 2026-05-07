@@ -142,6 +142,8 @@
 - [ ] Given each missing skill item, Then the rationale (source JD + requirement text) is displayed.
 - [ ] Given analysis results, Then they are generated via logical comparison of project depth vs. JD requirements, not just keyword matching.
 - [ ] Given a loading state, Then progress indicators for each stage (Fetching Reference Docs → Gap Analysis → Generating Career Plan) are displayed.
+- [ ] Given analysis completion, Then portfolio alignment checks are included: for each resume project, the system verifies `tech_stack[]` against JD-required technologies and flags missing ones as portfolio-category gaps with rationale (e.g., "No project demonstrates GraphQL required by JD").
+- [ ] Given analysis completion, Then keyword alignment checks are included: project descriptions and achievements are scanned for high-signal JD keywords, and missing keywords are flagged as keyword-category gaps with rationale.
 
 **Notes:** Include examples like [Junior Frontend / Target: Toss] in few-shot prompts. Force output into JSON schema.
 
@@ -397,15 +399,36 @@
 
 ---
 
+### US-022 | 🟡 Should | Career Profile Report with Plan Selector
+
+- **Page:** Career Profile (`/dashboard/profile`)
+- **Feature:** Report basis display and multi-plan selector
+
+**As a** developer with multiple career plans,
+**I want to** see which resume and career plan my profile report is based on, and switch between my plans,
+**So that** I can compare my competency snapshots across different target roles without confusion.
+
+**Acceptance Criteria:**
+- [ ] Given the career profile page loads, Then a "Based on" metadata line shows the resume upload date, target role, target company (if set), and plan creation date.
+- [ ] Given the user has more than one active/completed plan, Then a plan selector (`<select>`) is visible and lists all plans with their creation dates.
+- [ ] Given a plan is selected from the dropdown, Then the URL updates to `/dashboard/profile?planId=[id]` and the page re-renders server-side with data from the selected plan.
+- [ ] Given no `planId` search param is present, Then the most recent plan is selected by default.
+- [ ] Given the user has exactly one plan, Then only the "Based on" line is shown — the plan selector is not rendered.
+- [ ] Given the user has no plans, Then the existing "no gap analysis data yet" empty state is shown unchanged.
+
+**Notes:** `planId` is a URL search param for SEO-friendliness. Plan selection uses `router.push()` in the client component. All data fetching stays server-side in `page.tsx`.
+
+---
+
 ## 📊 Summary
 
 | Priority | Count | Stories |
 |----------|-------|---------|
 | 🔴 Must  | 10    | US-001 (Google OAuth), US-002~003, 005, 007, 009~011, 013~014, 016 |
-| 🟡 Should| 7     | US-006, 008, 012, 015, 018, 021 |
+| 🟡 Should| 8     | US-006, 008, 012, 015, 018, 021, 022 |
 | 🟢 Could | 2     | US-017, 019 |
 | ⚪ Won't | 1     | US-020 |
-| **Total**| **21**| |
+| **Total**| **22**| |
 
 **Recommended MVP Scope:** All "Must" + US-006 (Manual JD), US-012 (Toggle Visualization), US-015 (Chat History), US-021 (Copy as Markdown) — US-001 ~ US-016, US-021.
 

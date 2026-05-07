@@ -40,6 +40,8 @@ Must go beyond simple keyword matching and logically compare the depth of the us
 
 Gap analysis results must always include 'evidence' (e.g., explicitly stating which requirement from the JD the gap is based on).
 
+- Portfolio/Project Alignment: For each project in the user's resume `projects[]`, the gap analyzer must perform three explicit checks: (1) **tech stack coverage** — whether `tech_stack[]` includes JD-required technologies; (2) **keyword alignment** — whether project descriptions and achievements contain high-signal JD keywords; (3) **competency depth** — whether the project demonstrates the required proficiency level (e.g., "toy CRUD app" vs. JD requiring "production-scale microservices"). Gaps from these checks are emitted as `category:"portfolio"` or `category:"keyword"` items with concrete rationale (e.g., "No project demonstrates GraphQL required by JD").
+
 ### 2. Reference-Enhanced Career Planning
 - Description: In addition to gap analysis, the system queries the Vector DB for career trend and industry reference documents (`doc_type: "reference"`) relevant to the target role and company. These references (e.g., current IT trends, in-demand skills, hiring patterns) supplement the career plan generation step, ensuring the roadmap is grounded in real-world market context.
 
@@ -62,6 +64,15 @@ Gap analysis results must always include 'evidence' (e.g., explicitly stating wh
 - Response Quality: Leverages the high inference speed of Gemini Fast (Flash) mode to propose partial plan revisions within 3 seconds.
 
 - Chat History Retention: Chat messages are stored per career plan and retained for 7 days. Users can view conversation history when revisiting an existing career plan. Messages older than 7 days are automatically purged.
+
+### 5. Career Profile Report
+- **Description:** A dedicated dashboard page (`/dashboard/profile`) that presents the user's competency snapshot and skill gap overview derived from a selected career plan and its associated gap analysis.
+
+- **Report Basis Display:** Each report shows a "Based on" metadata line indicating the resume upload date and the career plan's creation date, target role, and company. This ensures users understand the data provenance of the displayed analysis.
+
+- **Plan Selector:** When a user has more than one active/completed career plan (up to 3), a `<select>` plan selector allows switching between plans. Selection is URL-search-param-based (`?planId=xxx`), keeping the page server-rendered and SEO-friendly. The most recent plan is selected by default.
+
+- **Data Displayed:** Competency radar chart (five categories: Skill, Experience, Certification, Portfolio, Keyword), evidence-based findings (gaps with High/Medium/Low priority labels), and the next 3 pending todos from the associated roadmap.
 
 ## 4. Technical Requirements
 ### 1. Model & Prompt Engineering
