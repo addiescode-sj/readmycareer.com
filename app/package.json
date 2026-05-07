@@ -14,6 +14,9 @@
     "@readmycareer/agents": "workspace:*",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.14.0",
     "mammoth": "^1.8.0",
     "next": "14.2.0",
     "next-intl": "^4.9.1",
@@ -21,7 +24,10 @@
     "react": "^18",
     "react-dom": "^18",
     "react-markdown": "^9.0.0",
+    "recharts": "^3.8.1",
     "sonner": "^1.5.0",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss-animate": "^1.0.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {
