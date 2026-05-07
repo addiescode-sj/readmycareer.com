@@ -4,7 +4,75 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import { SignOutButton } from "./SignOutButton";
+import { useTranslations, useLocale } from "next-intl";
+
+import {
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  ResponsiveContainer
+} from "recharts";
+
+interface GapAnalysis {
+  competencies: Array<{ name: string; score: number }>;
+  findings: Array<{ text: string; priority: "high" | "medium" | "low" }>;
+}
+
+interface RawStrength {
+  category: string;
+  item: string;
+  evidence?: string;
+}
+
+interface RawGap {
+  category: string;
+  item: string;
+  priority: "high" | "medium" | "low";
+  rationale?: string;
+}
+
+interface RawGapSummary {
+  strengths?: RawStrength[];
+  gaps?: RawGap[];
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  skill: "Skill",
+  experience: "Experience",
+  certification: "Cert",
+  portfolio: "Portfolio",
+  keyword: "Keyword",
+};
+
+// Fixed order ensures a consistent pentagon; all 5 always present so we never render a line
+const ALL_CATEGORIES = ["skill", "experience", "certification", "portfolio", "keyword"] as const;
+
+function deriveGapAnalysis(summaryJson: unknown): GapAnalysis | null {
+  if (!summaryJson || typeof summaryJson !== "object") return null;
+  const raw = summaryJson as RawGapSummary;
+  const strengths = raw.strengths ?? [];
+  const gaps = raw.gaps ?? [];
+  if (strengths.length === 0 && gaps.length === 0) return null;
+
+  const competencies = ALL_CATEGORIES.map((cat) => {
+    const s = strengths.filter((x) => x.category === cat).length;
+    const g = gaps.filter((x) => x.category === cat).length;
+    const total = s + g;
+    const score = total > 0 ? Math.round((s / total) * 100) : 0;
+    return { name: CATEGORY_LABELS[cat], score };
+  });
+
+  const findings = gaps.map((g) => ({
+    text: g.rationale || g.item,
+    priority: g.priority,
+  }));
+
+  return { competencies, findings };
+}
 
 interface TodoProgress {
   done: boolean;
@@ -32,6 +100,7 @@ interface CareerPlan {
   start_date: string | null;
   duration_weeks: number | null;
   created_at: string;
+  gap_analyses: Array<{ summary_json: unknown }> | null;
   roadmaps: Roadmap | Roadmap[] | null;
 }
 
@@ -52,21 +121,15 @@ interface WeekEntry {
   completed: number;
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  active: "진행 중",
-  completed: "완료",
-  archived: "보관됨",
-};
-
 const STATUS_COLOR: Record<string, string> = {
-  active: "bg-blue-100 text-blue-700",
-  completed: "bg-green-100 text-green-700",
-  archived: "bg-gray-100 text-gray-500",
+  active: "bg-secondary/10 text-secondary border border-secondary/20",
+  completed: "bg-primary/10 text-primary border border-primary/20",
+  archived: "bg-muted text-muted-foreground border border-border",
 };
 
-function formatDate(dateStr: string | null): string {
+function formatDate(dateStr: string | null, locale: string): string {
   if (!dateStr) return "-";
-  return new Intl.DateTimeFormat("ko-KR", {
+  return new Intl.DateTimeFormat(locale, {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -121,70 +184,38 @@ function buildWeeklyData(plans: CareerPlan[]): WeekEntry[] {
 }
 
 function progressColorClasses(pct: number): { card: string; bar: string; text: string } {
-  if (pct === 0) return { card: "bg-gray-50 border-gray-200", bar: "bg-gray-300", text: "text-gray-300" };
-  if (pct < 30) return { card: "bg-orange-50 border-orange-200", bar: "bg-orange-400", text: "text-orange-500" };
-  if (pct < 60) return { card: "bg-yellow-50 border-yellow-200", bar: "bg-yellow-400", text: "text-yellow-600" };
-  if (pct < 100) return { card: "bg-blue-50 border-blue-200", bar: "bg-blue-500", text: "text-blue-600" };
-  return { card: "bg-green-50 border-green-200", bar: "bg-green-500", text: "text-green-600" };
+  if (pct === 0) return { card: "bg-card border-border", bar: "bg-muted", text: "text-muted-foreground" };
+  if (pct < 50) return { card: "bg-card border-border", bar: "bg-primary/40", text: "text-primary" };
+  if (pct < 100) return { card: "bg-card border-border", bar: "bg-primary", text: "text-primary" };
+  return { card: "bg-secondary/5 border-secondary/30", bar: "bg-secondary", text: "text-secondary" };
 }
 
-function WeeklyAchievementChart({ plans }: { plans: CareerPlan[] }) {
-  const weeks = buildWeeklyData(plans);
-  if (weeks.length === 0) return null;
-
-  const totalTodos = weeks.reduce((s, w) => s + w.total, 0);
-  const totalCompleted = weeks.reduce((s, w) => s + w.completed, 0);
-  const overallPct = totalTodos > 0 ? Math.round((totalCompleted / totalTodos) * 100) : 0;
-
+function CompetencyRadarChart({ data }: { data: Array<{ name: string; score: number }> }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-gray-700">주차별 달성 현황</h3>
-        <span className="text-xs text-gray-400">
-          전체 {totalCompleted}/{totalTodos} 완료 ({overallPct}%)
-        </span>
-      </div>
-      <div className="overflow-x-auto pb-1">
-        <div className="flex gap-2" style={{ minWidth: `${Math.max(weeks.length * 80, 320)}px` }}>
-          {weeks.map((week, idx) => {
-            const pct = week.total > 0 ? Math.round((week.completed / week.total) * 100) : 0;
-            const colors = progressColorClasses(pct);
-
-            return (
-              <div
-                key={`${week.weekStart}-${idx}`}
-                className={`flex-none w-[76px] rounded-xl border p-2.5 ${colors.card}`}
-              >
-                <div className="text-xs text-gray-400 text-center mb-1 leading-none">
-                  {formatShortDate(week.weekStart)}
-                  {week.weekEnd && (
-                    <span className="block text-[9px] text-gray-300">
-                      ~{formatShortDate(week.weekEnd)}
-                    </span>
-                  )}
-                </div>
-                <div className={`text-xl font-bold text-center mb-1.5 ${colors.text}`}>
-                  {pct}%
-                </div>
-                <div className="w-full h-1.5 bg-white/60 rounded-full mb-1.5 border border-white">
-                  <div
-                    className={`h-1.5 rounded-full transition-all ${colors.bar}`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-                <div className="text-[10px] text-gray-400 text-center">
-                  {week.completed}/{week.total}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+    <div className="w-full h-[260px] mt-2">
+      <ResponsiveContainer width="100%" height="100%">
+        <RadarChart cx="50%" cy="50%" outerRadius="58%" data={data} margin={{ top: 16, right: 24, bottom: 16, left: 24 }}>
+          <PolarGrid stroke="rgba(139, 92, 246, 0.1)" />
+          <PolarAngleAxis
+            dataKey="name"
+            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10, fontWeight: 600 }}
+          />
+          <Radar
+            name="Skill Proficiency"
+            dataKey="score"
+            stroke="hsl(var(--primary))"
+            fill="hsl(var(--primary))"
+            fillOpacity={0.15}
+          />
+        </RadarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
 
 export function DashboardClient({ profile, initialPlans }: Props) {
+  const t = useTranslations("Dashboard");
+  const locale = useLocale();
   const [plans, setPlans] = useState<CareerPlan[]>(initialPlans);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -297,190 +328,227 @@ export function DashboardClient({ profile, initialPlans }: Props) {
     e.preventDefault();
     sessionStorage.removeItem("rmc_session");
     sessionStorage.removeItem("rmc_plan_saved");
-    window.location.href = "/?new=true";
+    router.push("/?new=true");
   }
 
-  const displayName = profile?.display_name ?? "사용자";
+  const displayName = profile?.display_name ?? t("defaultUserName");
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto max-w-4xl px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">내 커리어 플랜</h1>
-            <p className="text-sm text-gray-500 mt-0.5">저장된 플랜을 관리하세요</p>
+    <div className="min-h-screen bg-transparent">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-12">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-xl shadow-primary/20">
+            <span className="text-primary-foreground font-black text-xl tracking-tighter">SI</span>
           </div>
-          <div className="flex items-center gap-3">
-            {profile?.avatar_url && (
-              <img
-                src={profile.avatar_url}
-                alt={displayName}
-                width={36}
-                height={36}
-                className="rounded-full border border-gray-200"
-                referrerPolicy="no-referrer"
-              />
-            )}
-            <span className="text-sm font-medium text-gray-700">{displayName}</span>
-            <SignOutButton />
+          <div>
+            <h1 className="text-3xl font-black tracking-tight text-foreground">{t("title")}</h1>
+            <p className="text-sm font-medium text-muted-foreground">{t("subtitle")}</p>
           </div>
         </div>
 
-        {/* New plan button */}
-        <div className="mb-6">
+        <div className="flex items-center gap-4 bg-white/50 backdrop-blur-sm border border-border p-2 rounded-2xl pr-4">
+          {profile?.avatar_url && (
+            <img
+              src={profile.avatar_url}
+              alt={displayName}
+              width={40}
+              height={40}
+              className="rounded-xl border border-border shadow-sm"
+              referrerPolicy="no-referrer"
+            />
+          )}
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-foreground leading-none">{displayName}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Plan list */}
+      {plans.length === 0 ? (
+        <div className="text-center py-32 glass-card rounded-[32px] shadow-sm">
+          <div className="w-20 h-20 bg-muted rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <span className="text-4xl">📐</span>
+          </div>
+          <p className="text-lg font-bold text-foreground mb-2">{t("noPlans")}</p>
+          <p className="text-sm text-muted-foreground mb-8 max-w-sm mx-auto">{t("emptyStateDescription")}</p>
           <button
             onClick={handleNewPlan}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center gap-3 px-8 py-4 bg-primary text-primary-foreground font-bold rounded-2xl hover:opacity-90 transition-all shadow-xl shadow-primary/25"
           >
             <span>+</span>
-            새 플랜 시작하기
+            {t("newPlanButton")}
           </button>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-8">
+          {plans.map((plan) => {
+            const roadmap = Array.isArray(plan.roadmaps) ? plan.roadmaps[0] : plan.roadmaps;
+            const weekCount = roadmap?.week_count ?? plan.duration_weeks;
+            const progress = computeProgress(roadmap?.phases_json);
+            const gapRaw = Array.isArray(plan.gap_analyses) ? plan.gap_analyses[0] : plan.gap_analyses;
+            const gapAnalysis = deriveGapAnalysis(gapRaw?.summary_json);
 
-        {/* Weekly achievement chart */}
-        {plans.length > 0 && <WeeklyAchievementChart plans={plans} />}
+            return (
+              <div
+                key={plan.id}
+                onClick={() => router.push(`/dashboard/${plan.id}`)}
+                className="glass-card rounded-[32px] p-8 shadow-sm hover:shadow-2xl hover:shadow-primary/5 hover:border-primary/30 transition-all cursor-pointer group relative overflow-hidden"
+              >
+                {/* Background Decoration */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-primary/10 transition-colors" />
 
-        {/* Plan list */}
-        {plans.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-gray-200">
-            <p className="text-gray-400 text-sm mb-3">저장된 커리어 플랜이 없습니다.</p>
-            <button
-              onClick={handleNewPlan}
-              className="text-blue-600 text-sm hover:underline"
-            >
-              첫 플랜을 만들어보세요 →
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {plans.map((plan) => {
-              const roadmap = Array.isArray(plan.roadmaps)
-                ? plan.roadmaps[0]
-                : plan.roadmaps;
-              const weekCount = roadmap?.week_count ?? plan.duration_weeks;
-              const progress = computeProgress(roadmap?.phases_json);
-
-              return (
-                <div
-                  key={plan.id}
-                  onClick={() => router.push(`/dashboard/${plan.id}`)}
-                  className="bg-white rounded-2xl border border-gray-200 px-6 py-5 shadow-sm hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
-                        {editingPlanId === plan.id ? (
-                          <div className="flex items-center gap-1 flex-1 min-w-0">
-                            <input
-                              autoFocus
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleSaveTitle(plan.id);
-                                if (e.key === "Escape") cancelEditTitle();
-                              }}
-                              className="flex-1 min-w-0 text-base font-semibold text-gray-900 border border-blue-400 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                            />
-                            <button
-                              onClick={() => handleSaveTitle(plan.id)}
-                              disabled={savingTitle}
-                              className="text-blue-600 hover:text-blue-800 text-xs px-1 disabled:opacity-50"
-                              title="저장"
-                            >
-                              ✓
-                            </button>
-                            <button
-                              onClick={cancelEditTitle}
-                              className="text-gray-400 hover:text-gray-600 text-xs px-1"
-                              title="취소"
-                            >
-                              ✗
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <h2 className="text-base font-semibold text-gray-900 truncate group-hover:text-blue-700 transition-colors">
-                              {plan.title ?? plan.target_role}
-                            </h2>
+                <div className="flex flex-col lg:flex-row gap-10">
+                  {/* Info Section */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-4" onClick={(e) => e.stopPropagation()}>
+                      {editingPlanId === plan.id ? (
+                        <div className="flex items-center gap-2 flex-1">
+                          <input
+                            autoFocus
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveTitle(plan.id);
+                              if (e.key === "Escape") cancelEditTitle();
+                            }}
+                            className="flex-1 bg-muted/50 border border-primary/30 rounded-xl px-3 py-1.5 text-xl font-bold focus:outline-none focus:ring-4 focus:ring-primary/10"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 flex-wrap w-full">
+                          <h2 className="text-2xl font-black tracking-tight text-foreground group-hover:text-primary transition-colors">
+                            {plan.title ?? plan.target_role}
+                          </h2>
+                          <span className={cn(
+                            "text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border",
+                            plan.status === "active" ? "bg-primary/10 text-primary border-primary/20" : "bg-muted text-muted-foreground border-border"
+                          )}>
+                            {t(`status.${plan.status}`)}
+                          </span>
+                          <div className="flex items-center gap-4 ml-auto">
                             <button
                               onClick={(e) => startEditTitle(plan, e)}
-                              className="shrink-0 text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                              title="이름 수정"
+                              className="text-muted-foreground/30 hover:text-primary transition-colors"
                             >
                               ✏️
                             </button>
-                          </>
-                        )}
-                        <span
-                          className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLOR[plan.status] ?? STATUS_COLOR.active}`}
-                        >
-                          {STATUS_LABEL[plan.status] ?? plan.status}
-                        </span>
-                      </div>
-                      {plan.target_company && (
-                        <p className="text-sm text-gray-500">{plan.target_company}</p>
-                      )}
-                      <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
-                        {plan.start_date && (
-                          <span>시작: {formatDate(plan.start_date)}</span>
-                        )}
-                        {weekCount && <span>{weekCount}주 계획</span>}
-                      </div>
-
-                      {/* Progress bar */}
-                      {progress.total > 0 && (
-                        <div className="mt-3">
-                          <div className="flex justify-between text-xs text-gray-400 mb-1">
-                            <span>{progress.completed}/{progress.total} 완료</span>
-                            <span className={`font-medium ${progressColorClasses(progress.pct).text}`}>
-                              {progress.pct}%
-                            </span>
-                          </div>
-                          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-1.5 rounded-full transition-all ${progressColorClasses(progress.pct).bar}`}
-                              style={{ width: `${progress.pct}%` }}
-                            />
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(plan.id); }}
+                              className="px-2.5 py-1 rounded-full border border-destructive/30 text-destructive/60 text-[10px] font-black uppercase tracking-widest hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-all"
+                            >
+                              {t("terminatePlan")}
+                            </button>
                           </div>
                         </div>
                       )}
                     </div>
 
-                    {/* Delete button */}
-                    {confirmDeleteId === plan.id ? (
-                      <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <span className="text-xs text-gray-500">정말 삭제할까요?</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDelete(plan.id); }}
-                          disabled={deleting}
-                          className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
-                        >
-                          {deleting ? "삭제 중..." : "삭제"}
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
-                          disabled={deleting}
-                          className="px-3 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          취소
-                        </button>
+                    <div className="flex flex-wrap gap-4 mb-8">
+                      <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
+                        <span className="w-5 h-5 bg-muted rounded flex items-center justify-center text-[10px]">🏢</span>
+                        {plan.target_company}
                       </div>
-                    ) : (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(plan.id); }}
-                        className="shrink-0 px-3 py-1.5 text-xs text-gray-500 border border-transparent group-hover:border-gray-200 rounded-lg hover:!border-red-300 hover:!text-red-600 transition-colors"
-                      >
-                        삭제
-                      </button>
+                      <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
+                        <span className="w-5 h-5 bg-muted rounded flex items-center justify-center text-[10px]">⏱️</span>
+                        {weekCount} {t("weeksUnit")}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
+                        <span className="w-5 h-5 bg-muted rounded flex items-center justify-center text-[10px]">📅</span>
+                        {formatDate(plan.start_date, locale)}
+                      </div>
+                    </div>
+
+                    {/* Findings Cards */}
+                    {gapAnalysis?.findings && (
+                      <div className="space-y-3 mb-8">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-4">{t("evidenceBasedFindings")}</h4>
+                        {gapAnalysis.findings.slice(0, 2).map((finding, idx) => (
+                          <div key={idx} className="flex items-start gap-3 p-4 rounded-2xl bg-muted/30 border border-border/50">
+                            <span className={cn(
+                              "shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest mt-0.5",
+                              finding.priority === "high"
+                                ? "bg-primary/10 text-primary border border-primary/20"
+                                : finding.priority === "medium"
+                                  ? "bg-secondary/10 text-secondary border border-secondary/20"
+                                  : "bg-muted text-muted-foreground border border-border"
+                            )}>
+                              {t(`priorityLabels.${finding.priority}`)}
+                            </span>
+                            <p className="text-sm font-medium text-foreground/80 leading-relaxed">{finding.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Progress */}
+                    {progress.total > 0 && (
+                      <div className="mt-auto pt-6 border-t border-border/50">
+                        <div className="flex justify-between items-end mb-3">
+                          <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{t("architecturalCompletion")}</span>
+                          <span className="text-2xl font-black tracking-tighter text-primary">{progress.pct}%</span>
+                        </div>
+                        <div className="w-full h-3 bg-muted rounded-full overflow-hidden p-0.5 border border-border">
+                          <div
+                            className="h-full rounded-full bg-primary shadow-[0_0_10px_rgba(139,92,246,0.5)] transition-all duration-1000"
+                            style={{ width: `${progress.pct}%` }}
+                          />
+                        </div>
+                      </div>
                     )}
                   </div>
+
+                  {/* Chart Section */}
+                  <div className="w-full lg:w-[300px] shrink-0 flex flex-col items-center justify-center p-6 bg-primary/5 rounded-[32px] border border-primary/10">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">{t("competencyRadar")}</h4>
+                    {gapAnalysis?.competencies ? (
+                      <CompetencyRadarChart data={gapAnalysis.competencies} />
+                    ) : (
+                      <div className="h-[200px] flex items-center justify-center text-muted-foreground text-xs italic">
+                        {t("noCompetencyData")}
+                      </div>
+                    )}
+                    <div className="mt-6 w-full">
+                      <button className="w-full py-3 bg-white border border-primary/20 text-primary font-bold text-sm rounded-xl hover:bg-primary hover:text-white transition-all shadow-sm">
+                        {t("openFullRoadmap")}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              );
-            })}
+
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setConfirmDeleteId(null)}>
+          <div className="glass-card rounded-[32px] p-10 max-w-md w-full shadow-2xl border-destructive/20 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="w-16 h-16 bg-destructive/10 rounded-2xl flex items-center justify-center mb-6">
+              <span className="text-3xl">⚠️</span>
+            </div>
+            <h3 className="text-2xl font-black tracking-tight text-foreground mb-2">{t("terminatePlanConfirm")}</h3>
+            <p className="text-muted-foreground text-sm mb-8 leading-relaxed">{t("terminatePlanWarning")}</p>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="py-4 rounded-2xl border border-border font-bold text-sm hover:bg-muted transition-all"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}
+                disabled={deleting}
+                className="py-4 rounded-2xl bg-destructive text-destructive-foreground font-bold text-sm hover:opacity-90 transition-all shadow-xl shadow-destructive/20"
+              >
+                {deleting ? t("deleting") : t("confirmDelete")}
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

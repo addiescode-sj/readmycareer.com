@@ -1,8 +1,16 @@
 "use client";
 
+import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useTranslations } from "next-intl";
 
-export function SignOutButton() {
+interface Props {
+  className?: string;
+  showLabel?: boolean;
+}
+
+export function SignOutButton({ className, showLabel = true }: Props) {
+  const t = useTranslations("Dashboard");
   const supabase = createClient();
 
   async function handleSignOut() {
@@ -15,9 +23,11 @@ export function SignOutButton() {
   return (
     <button
       onClick={handleSignOut}
-      className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+      title={!showLabel ? t("logout") : undefined}
+      className={className || "px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"}
     >
-      로그아웃
+      <LogOut className="w-5 h-5 shrink-0" />
+      {showLabel && <span className="whitespace-nowrap">{t("logout")}</span>}
     </button>
   );
 }

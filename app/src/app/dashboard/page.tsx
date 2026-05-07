@@ -19,7 +19,7 @@ export default async function DashboardPage() {
     supabase
       .from("career_plans")
       .select(
-        "id, title, target_role, target_company, status, start_date, duration_weeks, created_at, roadmaps(summary, week_count, phases_json)"
+        "id, title, target_role, target_company, status, start_date, duration_weeks, created_at, gap_analyses(summary_json), roadmaps(summary, week_count, phases_json)"
       )
       .eq("user_id", user.id)
       .neq("status", "archived")
