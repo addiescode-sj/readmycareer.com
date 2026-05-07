@@ -1,4 +1,15 @@
 {
+  "LandingPage": {
+    "headline": "Bridge the Gap to Your Dream Tech Role with",
+    "headlineHighlight": "AI-Powered Precision.",
+    "subheadline": "Objectively analyze your competencies against target JDs and get a hyper-personalized roadmap.",
+    "ctaButton": "Create Career Plan",
+    "signInLink": "Already have an account? Sign in →",
+    "redirecting": "Redirecting…",
+    "featureGapAnalysis": "Gap Analysis",
+    "featureRoadmap": "Personalized Roadmap",
+    "featureCoaching": "Interactive Coaching"
+  },
   "SessionLayout": {
     "title": "readmycareer.com",
     "subtitle": "AI Career Coach — From Resume Gap Analysis to Weekly Plans",
@@ -70,7 +81,39 @@
     "weeksUnit": "weeks",
     "completed": "done",
     "overallProgress": "Overall Progress",
-    "todoCount": "{count} tasks"
+    "todoCount": "{count} tasks",
+    "achievements": {
+      "p30": "30% achieved! Keep going 👏",
+      "p60": "60% completed! More than halfway 💪",
+      "p90": "90% achieved! Almost there 🔥",
+      "p100": "Goal reached! Amazing! 🏆"
+    },
+    "saving": "Saving plan...",
+    "saved": "Plan saved!",
+    "viewInDashboard": "View in Dashboard →",
+    "quotaExceeded": "Maximum plan limit (3) reached. Delete existing plans in dashboard and try again.",
+    "goToDashboard": "Dashboard →",
+    "saveFailed": "Failed to save plan.",
+    "retry": "Retry",
+    "savePrompt": "Want to save this plan?",
+    "loginToPersist": "Log in with Google to keep your plans even after closing the browser.",
+    "saveWithGoogle": "Save with Google",
+    "backToDashboard": "Return to Dashboard",
+    "timeline": "Timeline",
+    "duration": "Duration",
+    "cyclesUnit": "Weeks",
+    "architecturalCompletion": "Overall Completion",
+    "cycleLabel": "Cycle {n}",
+    "protocolsCount": "{count} Tasks",
+    "defaultMilestone": "General Optimization"
+  },
+  "ReturningUserGate": {
+    "title": "Do you want to log in?",
+    "lastLogin": "Last login: {date}",
+    "goDashboard": "Go to Dashboard",
+    "loginGoogle": "Log in with Google",
+    "continueGuest": "Continue as Guest",
+    "loginError": "Error during login: {message}"
   },
   "ChatInterface": {
     "greeting": "Hello! I'm your AI Career Coach. Feel free to ask me anything about your career preparation.",
@@ -90,6 +133,144 @@
   "FloatingChat": {
     "title": "AI Career Coach",
     "closeLabel": "Close",
-    "fabLabel": "Chat with AI Coach"
+    "fabLabel": "Chat with AI Coach",
+    "alwaysHereToHelp": "Always here to help"
+  },
+  "InitializeWorkspace": {
+    "title": "Initialize Workspace",
+    "description": "Upload your current data and define your target. The engine will architect a precise path to your next technical milestone.",
+    "resumeData": "Resume Data",
+    "dropPrompt": "Drop PDF here",
+    "clickBrowse": "or click to browse",
+    "clickReplace": "Click to replace file",
+    "targetParameters": "Target Parameters",
+    "targetCompany": "Target Company",
+    "roleDesignation": "Role Designation",
+    "timeHorizon": "Time Horizon",
+    "jdContext": "Job Description Context",
+    "paste": "Paste",
+    "jdPlaceholder": "// Paste raw job description here...\n// The engine will parse required skills,\n// tech stack, and implicit expectations.",
+    "startAnalysis": "Start AI Analysis",
+    "architecting": "Architecting Plan...",
+    "uploadError": "Please upload your resume first.",
+    "sidebar": {
+      "dashboard": "Dashboard",
+      "roadmap": "Roadmap",
+      "profile": "Profile",
+      "chatHistory": "Chat History"
+    }
+  },
+  "AnalysisProgressOverlay": {
+    "defaultStage": "Processing your career data…",
+    "insights": {
+      "0": "Cross-referencing your experience against 10,000+ job market signals to pinpoint your highest-leverage gaps.",
+      "1": "Great careers aren't built in a day — we're crafting a structured path that fits your exact timeline.",
+      "2": "Mapping your competency profile to the skills that matter most for your target role.",
+      "3": "Generating a personalized weekly schedule that balances depth and breadth for maximum impact."
+    }
+  },
+  "DashboardRoadmap": {
+    "title": "Protocol Roadmap",
+    "subtitle": "Your active career plan, week by week",
+    "emptyState": "No active career plan found.",
+    "emptyStateAction": "Initialize a new plan to get started.",
+    "phasePrep": "Prep",
+    "phaseDive": "Deep Dive",
+    "phaseApply": "Application",
+    "weekLabel": "Week {n}",
+    "tasksCompleted": "{done}/{total} tasks",
+    "progress": "Progress",
+    "weekActive": "Active",
+    "weekLocked": "Locked",
+    "aiCoachTitle": "AI Career Coach",
+    "askCoachPlaceholder": "Ask your coach..."
+  },
+  "CareerProfile": {
+    "title": "Career Profile",
+    "subtitle": "Your competency snapshot and skill gap overview",
+    "targetRole": "Target Role",
+    "targetCompany": "Target Company",
+    "competencies": "Competency Radar",
+    "findings": "Evidence-Based Findings",
+    "nextActions": "Next Actions",
+    "noFindings": "No gap analysis data yet.",
+    "noActions": "All caught up — no pending tasks.",
+    "priorityHigh": "High",
+    "priorityMedium": "Medium",
+    "priorityLow": "Low",
+    "reportBasis": "Based on: Resume uploaded {resumeDate} · Target: {role} (plan created {planDate})",
+    "reportBasisWithCompany": "Based on: Resume uploaded {resumeDate} · Target: {role} at {company} (plan created {planDate})",
+    "reportBasisNoResume": "Based on: No linked resume · Target: {role} (plan created {planDate})",
+    "reportBasisNoResumeWithCompany": "Based on: No linked resume · Target: {role} at {company} (plan created {planDate})",
+    "selectPlan": "Select plan",
+    "planCreatedOn": "Created {date}"
+  },
+  "ConversationHistory": {
+    "title": "AI Conversations",
+    "subtitle": "Your chat history with the AI Career Coach",
+    "emptyState": "No conversations yet.",
+    "emptyStateAction": "Start a new plan and activate the AI Coach to begin chatting.",
+    "conversationsTitle": "Conversations",
+    "lastSevenDays": "Last 7 days",
+    "contextTitle": "Current Context",
+    "activeTrack": "Active Track",
+    "selectConversation": "Select a conversation to continue chatting."
+  },
+  "AppSidebar": {
+    "dashboard": "Dashboard",
+    "roadmap": "Protocol Roadmap",
+    "profile": "Career Profile",
+    "history": "AI Conversations",
+    "newPlan": "New Plan",
+    "systemConfig": "System Config"
+  },
+  "GapAnalysisDashboard": {
+    "title": "Gap Analysis",
+    "backToDashboard": "Back to Dashboard",
+    "overallReadiness": "Overall Readiness",
+    "startAnalysis": "Open AI Career Coach",
+    "roadmap": "Career Roadmap"
+  },
+  "Dashboard": {
+    "title": "My Career Plans",
+    "subtitle": "Manage your saved plans",
+    "defaultUserName": "User",
+    "newPlanButton": "Start New Plan",
+    "weeklyAchievement": "Weekly Achievement",
+    "overallStatus": "Overall {completed}/{total} completed ({pct}%)",
+    "noPlans": "No career plans saved.",
+    "createFirst": "Create your first plan →",
+    "status": {
+      "active": "Active",
+      "completed": "Completed",
+      "archived": "Archived"
+    },
+    "startDateLabel": "Start: {date}",
+    "weekCountLabel": "{count}-week plan",
+    "completedCountLabel": "{completed}/{total} completed",
+    "deleteConfirm": "Are you sure?",
+    "deleteButton": "Delete",
+    "deleting": "Deleting...",
+    "cancel": "Cancel",
+    "editTitle": "Edit Title",
+    "save": "Save",
+    "logout": "Logout",
+    "terminatePlan": "Terminate Plan",
+    "terminatePlanConfirm": "Terminate Plan?",
+    "terminatePlanWarning": "This will permanently delete your career roadmap and all associated data. This action cannot be undone.",
+    "confirmDelete": "Confirm Delete",
+    "verifiedArchitect": "Verified Architect",
+    "emptyStateDescription": "Start your first AI-powered career analysis to architect your precision roadmap.",
+    "evidenceBasedFindings": "Evidence-Based Findings",
+    "architecturalCompletion": "Architectural Completion",
+    "competencyRadar": "Competency Radar",
+    "openFullRoadmap": "Open Full Roadmap",
+    "noCompetencyData": "No competency data available",
+    "weeksUnit": "Weeks",
+    "priorityLabels": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    }
   }
 }

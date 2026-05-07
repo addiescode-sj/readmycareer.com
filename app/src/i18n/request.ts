@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 
 /** Detect locale from Accept-Language header; falls back to 'ko'. */
 function detectLocale(acceptLanguage: string | null): "ko" | "en" {
-  if (!acceptLanguage) return "ko";
+  if (!acceptLanguage) return "en";
   const langs = acceptLanguage
     .split(",")
     .map((l) => l.split(";")[0].trim().toLowerCase());
@@ -11,7 +11,7 @@ function detectLocale(acceptLanguage: string | null): "ko" | "en" {
     if (lang.startsWith("ko")) return "ko";
     if (lang.startsWith("en")) return "en";
   }
-  return "ko";
+  return "en";
 }
 
 export default getRequestConfig(async () => {
