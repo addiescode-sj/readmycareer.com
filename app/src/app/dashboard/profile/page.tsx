@@ -23,6 +23,16 @@ interface ProfilePageProps {
   searchParams: Promise<{ planId?: string }>;
 }
 
+interface PlanRow {
+  id: string;
+  target_role: string;
+  target_company: string | null;
+  created_at: string;
+  resumes: unknown;
+  gap_analyses: unknown;
+  roadmaps: unknown;
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   skill: "Skill",
   experience: "Experience",
@@ -78,7 +88,7 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   ]);
 
   const profile = profileResult.data;
-  const plans = plansResult.data ?? [];
+  const plans = (plansResult.data ?? []) as unknown as PlanRow[];
 
   const selectedPlanId = resolvedParams.planId;
   const plan = selectedPlanId
