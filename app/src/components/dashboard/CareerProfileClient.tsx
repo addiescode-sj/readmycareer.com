@@ -153,11 +153,11 @@ export function CareerProfileClient({
         title={t("title")}
         subtitle={t("subtitle")}
         action={planOptions.length > 1 ? (
-          <div className="relative">
+          <div className="relative w-full max-w-full">
             <select
               value={selectedPlanId ?? ""}
               onChange={(e) => handlePlanChange(e.target.value)}
-              className="appearance-none text-sm font-semibold bg-muted/50 border border-border rounded-xl pl-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+              className="w-full appearance-none text-sm font-semibold bg-muted/50 border border-border rounded-xl pl-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
               aria-label={t("selectPlan")}
             >
               {planOptions.map((opt) => (

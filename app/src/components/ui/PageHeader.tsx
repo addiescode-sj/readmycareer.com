@@ -16,7 +16,7 @@ export function PageHeader({ title, subtitle, action, className }: PageHeaderPro
           <p className="text-sm font-medium text-muted-foreground mt-1.5">{subtitle}</p>
         )}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="shrink-0 min-w-0 max-w-full">{action}</div>}
     </div>
   );
 }
