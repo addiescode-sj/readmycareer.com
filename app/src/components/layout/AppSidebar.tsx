@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { SignOutButton } from "@/components/dashboard/SignOutButton";
+import { Logo } from "@/components/ui/Logo";
 
 interface Props {
   open: boolean;
@@ -55,9 +56,7 @@ export default function AppSidebar({ open, onToggle }: Props) {
         )}
       >
         <Link href="/" className={cn("flex items-center gap-3 group min-w-0", !open && "lg:gap-0")}>
-          <div className="w-10 h-10 shrink-0 rounded-2xl overflow-hidden group-hover:scale-105 transition-all duration-300">
-            <Image src="/logo.svg" alt="readmycareer logo" width={40} height={40} className="w-full h-full object-cover" />
-          </div>
+          <Logo size={40} className="group-hover:scale-105" />
           <div
             className={cn(
               "overflow-hidden transition-all duration-300",

@@ -1,11 +1,11 @@
+import { Logo } from "@/components/ui/Logo";
+
 export default function UploadLoading() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background">
       <div className="flex flex-col items-center gap-6">
         {/* Logo mark */}
-        <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center border border-primary/20 animate-pulse">
-          <span className="text-primary font-black text-2xl tracking-tighter">SI</span>
-        </div>
+        <Logo size={64} animate={true} className="rounded-3xl" />
 
         {/* Synthetic spinner */}
         <div

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useTranslations, useLocale } from "next-intl";
 import { useSession } from "@/hooks/useSession";
 import { AnalysisProgressOverlay } from "./ui/AnalysisProgressOverlay";
+import { Logo } from "./ui/Logo";
 
 const JD_TEXT_MIN_LENGTH = 50;
 const JD_TEXT_MAX_LENGTH = 10000;
@@ -224,9 +225,7 @@ export default function InitializeWorkspace() {
       <header className="p-6 border-b border-border bg-white/50 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl overflow-hidden">
-              <Image src="/logo.svg" alt="readmycareer logo" width={40} height={40} className="w-full h-full object-cover" />
-            </div>
+            <Logo size={40} className="rounded-xl" />
             <div>
               <h1 className="font-semibold text-foreground text-sm leading-tight">readmycareer.com</h1>
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Workspace Initialization</p>
