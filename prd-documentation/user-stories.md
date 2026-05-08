@@ -420,17 +420,66 @@
 
 ---
 
+### US-023 | 🟡 Should | Application Status & Notes on Career Profile
+
+- **Page:** Career Profile (`/dashboard/profile`)
+- **Feature:** Job application status tracker and free-form notes textarea
+
+**As a** developer actively applying for jobs,
+**I want to** record my current application stage and add personal notes (e.g., interview feedback) directly on the career profile page,
+**So that** I can track my progress and capture important context alongside my competency analysis without switching tools.
+
+**Acceptance Criteria:**
+- [ ] Given the career profile page loads, Then an application status `<select>` is rendered with the following options (in order): Not set, 서류 지원 완료, 서류 합격, 서류 불합격, 1차 면접 통과, 2차 면접 통과, 3차 면접 통과, 최종 오퍼 수락, 오퍼 미수락.
+- [ ] Given the user selects a status, Then the value is immediately saved to `career_plans.application_status` for the currently selected plan.
+- [ ] Given a notes textarea, Then it accepts up to 2000 characters and shows a live character counter (current / 2000).
+- [ ] Given the notes exceed 2000 characters, Then the input is blocked and an inline validation message is shown.
+- [ ] Given the user types notes and clicks Save, Then the notes are saved to `career_plans.notes` for the currently selected plan.
+- [ ] Given a save succeeds, Then a brief success indicator is shown ("Saved").
+- [ ] Given a save fails, Then an inline error message is displayed without losing the user's draft.
+- [ ] Given the status selector and notes textarea, Then they are laid out in a two-column horizontal grid, positioned immediately before the "Next Actions" section.
+- [ ] Given the user has no active plan, Then the status/notes section is not rendered.
+
+**Notes:** `application_status` is stored as a nullable TEXT enum in `career_plans`. `notes` is nullable TEXT with a DB-level CHECK (`char_length(notes) <= 2000`). Status is saved on `onChange`; notes are saved on explicit button click. The section is client-side only — no SSR mutation needed.
+
+---
+
+---
+
+### US-024 | 🟡 Should | Roadmap Velocity & Pace Visualization
+
+- **Page:** Protocol Roadmap (`/dashboard/roadmap`)
+- **Feature:** Linear-style velocity chart showing required pace vs. actual completion
+
+**As a** developer tracking their career plan progress,
+**I want to** see a velocity chart showing whether I'm on pace to complete my plan by the end date,
+**So that** I can adjust my daily study intensity before it's too late.
+
+**Acceptance Criteria:**
+- [ ] Given a roadmap with `date_range` on each week, Then the chart calculates plan start, end, and today's position.
+- [ ] Given the chart is rendered, Then an ideal trajectory line (dashed diagonal) is visible from 0% to 100%.
+- [ ] Given the chart is rendered, Then a required pace line is shown from (today, actual%) to (end, 100%).
+- [ ] Given today is before the plan end date, Then a vertical "today" marker is displayed on the chart.
+- [ ] Given actual completion >= ideal at today's position (within 5% tolerance), Then the status is "On Track" or "Ahead of Schedule"; fill area is green.
+- [ ] Given actual completion < ideal - 5%, Then the status is "Behind Schedule"; fill area is red.
+- [ ] Given the metric strip, Then it shows: days elapsed, days remaining, current completion %, and required %/week to finish on time.
+- [ ] Given no `date_range` data on any week, Then the chart is not rendered (graceful fallback, no error).
+
+**Notes:** Chart is SVG-based (no external charting library). Status thresholds: `completionPct > timeProgressPct + 10` = Ahead; within ±5% = On Track; below = Behind.
+
+---
+
 ## 📊 Summary
 
 | Priority | Count | Stories |
 |----------|-------|---------|
 | 🔴 Must  | 10    | US-001 (Google OAuth), US-002~003, 005, 007, 009~011, 013~014, 016 |
-| 🟡 Should| 8     | US-006, 008, 012, 015, 018, 021, 022 |
+| 🟡 Should| 10    | US-006, 008, 012, 015, 018, 021, 022, 023, 024 |
 | 🟢 Could | 2     | US-017, 019 |
 | ⚪ Won't | 1     | US-020 |
-| **Total**| **22**| |
+| **Total**| **24**| |
 
-**Recommended MVP Scope:** All "Must" + US-006 (Manual JD), US-012 (Toggle Visualization), US-015 (Chat History), US-021 (Copy as Markdown) — US-001 ~ US-016, US-021.
+**Recommended MVP Scope:** All "Must" + US-006 (Manual JD), US-012 (Toggle Visualization), US-015 (Chat History), US-021 (Copy as Markdown), US-023 (Application Status & Notes) — US-001 ~ US-016, US-021, US-023.
 
 **Next Steps:**
 - [ ] Story point estimation with the dev team (Planning Poker) — Focus on US-016 RAG pipeline effort.

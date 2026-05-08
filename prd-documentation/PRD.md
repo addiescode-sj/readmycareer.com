@@ -58,6 +58,10 @@ Gap analysis results must always include 'evidence' (e.g., explicitly stating wh
 
 - Markdown Export: A "Copy as Markdown" button on the roadmap summary card converts the full career plan (all weeks and tasks) into a structured markdown table. Users can paste this directly into Notion, GitHub Issues, or any markdown-compatible tool. The table columns are: Week | Theme | Date Range | Milestone | Task | Category | Priority | Est. Hours.
 
+- **Career Plan Selector:** The Protocol Roadmap page (`/dashboard/roadmap`) supports a plan selector dropdown (shown when the user has more than one non-archived career plan). Selection is URL-search-param-based (`?planId=xxx`), keeping the page server-rendered and consistent with the Career Profile page pattern. The most recent plan is selected by default.
+
+- **Roadmap Velocity Tracker:** A Linear-style cycle speed chart rendered on the Protocol Roadmap page. X-axis = elapsed time (% of total plan duration); Y-axis = task completion %. Three visual elements: (1) dashed *ideal trajectory* line (linear 0→100%); (2) solid *required pace* line from (today, actual%) → (end, 100%) showing the remaining velocity needed; (3) a vertical today marker. The area between the ideal and required pace lines is filled green (on track / ahead) or red (behind). A metric strip below the chart shows days elapsed, days remaining, current completion %, and required weekly completion rate. Status badge: On Track / Ahead of Schedule / Behind Schedule. Falls back gracefully if `date_range` data is absent.
+
 ### 4. Interactive Career Coaching (Chat)
 - Description: Dynamically restructures the roadmap in real-time based on user feedback (e.g., If the user states, "I am already familiar with this concept," the AI adjusts the plan accordingly).
 
@@ -72,7 +76,11 @@ Gap analysis results must always include 'evidence' (e.g., explicitly stating wh
 
 - **Plan Selector:** When a user has more than one active/completed career plan (up to 3), a `<select>` plan selector allows switching between plans. Selection is URL-search-param-based (`?planId=xxx`), keeping the page server-rendered and SEO-friendly. The most recent plan is selected by default.
 
-- **Data Displayed:** Competency radar chart (five categories: Skill, Experience, Certification, Portfolio, Keyword), evidence-based findings (gaps with High/Medium/Low priority labels), and the next 3 pending todos from the associated roadmap.
+- **Data Displayed:** Competency radar chart (five categories: Skill, Experience, Certification, Portfolio, Keyword), evidence-based findings (gaps with High/Medium/Low priority labels), application status tracker, user notes, and the next 3 pending todos from the associated roadmap.
+
+- **Application Status Tracking:** A `<select>` input lets the user record their current job application stage for the career plan. Allowed values: `applied` (서류 지원 완료), `doc_passed` (서류 합격), `doc_failed` (서류 불합격), `interview_1_pass` (1차 면접 통과), `interview_2_pass` (2차 면접 통과), `interview_3_pass` (3차 면접 통과), `offer_accepted` (최종 오퍼 수락), `offer_declined` (오퍼 미수락). Stored in `career_plans.application_status`. Default is unset (null).
+
+- **User Notes:** A textarea (max 2000 characters) lets the user attach free-form notes to the career plan — e.g., interview feedback, preparation memos. Stored in `career_plans.notes`. The status selector and notes textarea are rendered in a two-column horizontal layout, positioned immediately before the "Next Actions" section.
 
 ## 4. Technical Requirements
 ### 1. Model & Prompt Engineering
