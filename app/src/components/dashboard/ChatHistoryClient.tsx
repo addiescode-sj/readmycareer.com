@@ -2,11 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { createClient } from "@/lib/supabase/client";
-import { Send, MessageSquare, ChevronRight } from "lucide-react";
+import { Send, MessageSquare, ChevronRight, ChevronDown } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -351,6 +351,7 @@ function ChatPanel({ plan }: { plan: Plan | null }) {
 export function ChatHistoryClient({ plans, initialPlanId }: Props) {
   const t = useTranslations("ConversationHistory");
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(initialPlanId);
+  const [mobileContextOpen, setMobileContextOpen] = useState(false);
 
   const selectedPlan = plans.find((p) => p.id === selectedPlanId) ?? null;
 
@@ -402,14 +403,45 @@ export function ChatHistoryClient({ plans, initialPlanId }: Props) {
       </div>
 
       {/* ── Right: Current context ── */}
-      <div className="w-full lg:w-60 shrink-0 border-b lg:border-b-0 lg:border-l border-border/50 bg-surface-container-low/30 flex flex-col max-h-[140px] lg:max-h-none order-2 lg:order-3">
-        <div className="px-4 py-3 lg:py-4 border-b border-border/50 shrink-0">
-          <h2 className="text-xs font-black uppercase tracking-widest text-foreground">{t("contextTitle")}</h2>
-          <p className="text-[10px] text-muted-foreground mt-0.5">{t("contextSubtitle")}</p>
+      <div className="w-full lg:w-60 shrink-0 border-b lg:border-b-0 lg:border-l border-border/50 bg-surface-container-low/30 flex flex-col order-2 lg:order-3">
+        {/* Header: accordion trigger on mobile, static on desktop */}
+        <button
+          className="w-full px-4 py-3 lg:py-4 border-b border-border/50 shrink-0 flex items-center justify-between lg:pointer-events-none"
+          onClick={() => setMobileContextOpen((v) => !v)}
+          aria-expanded={mobileContextOpen}
+        >
+          <div className="text-left">
+            <h2 className="text-xs font-black uppercase tracking-widest text-foreground">{t("contextTitle")}</h2>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{t("contextSubtitle")}</p>
+          </div>
+          <ChevronDown
+            className={cn(
+              "w-4 h-4 text-muted-foreground transition-transform duration-200 lg:hidden",
+              mobileContextOpen && "rotate-180"
+            )}
+          />
+        </button>
+
+        {/* Content: always visible on desktop, accordion on mobile */}
+        <div className="hidden lg:flex flex-1 overflow-y-auto min-h-0">
+          <div className="w-full">
+            <ContextPanel plan={selectedPlan} />
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto min-h-0">
-          <ContextPanel plan={selectedPlan} />
-        </div>
+        <AnimatePresence initial={false}>
+          {mobileContextOpen && (
+            <motion.div
+              key="mobile-context"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.22, ease: "easeInOut" }}
+              className="overflow-hidden lg:hidden"
+            >
+              <ContextPanel plan={selectedPlan} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
