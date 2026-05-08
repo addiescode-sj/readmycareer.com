@@ -8,14 +8,7 @@ import { cn } from "@/lib/utils";
 import { SignOutButton } from "./SignOutButton";
 import { useTranslations, useLocale } from "next-intl";
 
-import {
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  ResponsiveContainer
-} from "recharts";
+import { CompetencyRadar } from "@/components/ui/CompetencyRadar";
 
 interface GapAnalysis {
   competencies: Array<{ name: string; score: number }>;
@@ -190,28 +183,6 @@ function progressColorClasses(pct: number): { card: string; bar: string; text: s
   return { card: "bg-secondary/5 border-secondary/30", bar: "bg-secondary", text: "text-secondary" };
 }
 
-function CompetencyRadarChart({ data }: { data: Array<{ name: string; score: number }> }) {
-  return (
-    <div className="w-full h-[260px] mt-2">
-      <ResponsiveContainer width="100%" height="100%">
-        <RadarChart cx="50%" cy="50%" outerRadius="58%" data={data} margin={{ top: 16, right: 24, bottom: 16, left: 24 }}>
-          <PolarGrid stroke="rgba(139, 92, 246, 0.1)" />
-          <PolarAngleAxis
-            dataKey="name"
-            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10, fontWeight: 600 }}
-          />
-          <Radar
-            name="Skill Proficiency"
-            dataKey="score"
-            stroke="hsl(var(--primary))"
-            fill="hsl(var(--primary))"
-            fillOpacity={0.15}
-          />
-        </RadarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
 
 export function DashboardClient({ profile, initialPlans }: Props) {
   const t = useTranslations("Dashboard");
@@ -502,7 +473,7 @@ export function DashboardClient({ profile, initialPlans }: Props) {
                   <div className="w-full lg:w-[300px] shrink-0 flex flex-col items-center justify-center p-6 bg-primary/5 rounded-[32px] border border-primary/10">
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">{t("competencyRadar")}</h4>
                     {gapAnalysis?.competencies ? (
-                      <CompetencyRadarChart data={gapAnalysis.competencies} />
+                      <CompetencyRadar data={gapAnalysis.competencies} height={260} outerRadius="58%" margin={{ top: 16, right: 24, bottom: 16, left: 24 }} />
                     ) : (
                       <div className="h-[200px] flex items-center justify-center text-muted-foreground text-xs italic">
                         {t("noCompetencyData")}

@@ -6,13 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { AICoachChat } from "@/components/ui/AICoachChat";
-import {
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  ResponsiveContainer,
-} from "recharts";
+import { CompetencyRadar } from "@/components/ui/CompetencyRadar";
 import RoadmapView from "@/components/RoadmapView";
 import { createClient } from "@/lib/supabase/client";
 
@@ -244,34 +238,12 @@ export default function SavedPlanClient({
               {tProfile("competencies")}
             </h2>
             {competencies.length > 0 ? (
-              <div className="w-full h-[240px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart
-                    cx="50%"
-                    cy="50%"
-                    outerRadius="60%"
-                    margin={{ top: 16, right: 24, bottom: 16, left: 24 }}
-                    data={competencies}
-                  >
-                    <PolarGrid stroke="rgba(139,92,246,0.1)" />
-                    <PolarAngleAxis
-                      dataKey="name"
-                      tick={{
-                        fill: "hsl(var(--muted-foreground))",
-                        fontSize: 10,
-                        fontWeight: 600,
-                      }}
-                    />
-                    <Radar
-                      name="Score"
-                      dataKey="score"
-                      stroke="hsl(var(--primary))"
-                      fill="hsl(var(--primary))"
-                      fillOpacity={0.15}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
+              <CompetencyRadar
+                data={competencies}
+                height={240}
+                outerRadius="60%"
+                margin={{ top: 16, right: 24, bottom: 16, left: 24 }}
+              />
             ) : (
               <p className="text-sm text-muted-foreground">
                 {tProfile("noFindings")}
