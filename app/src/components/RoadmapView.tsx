@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { ChevronDown } from "lucide-react";
 
 interface TodoItem {
   id: string;
@@ -507,29 +508,29 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
       {!hideSaveBanner && <SaveBanner />}
 
       {/* Summary card */}
-      <div className="glass-card rounded-[40px] p-10 shadow-2xl shadow-primary/5">
-        <div className="flex flex-col lg:flex-row items-start justify-between gap-8 mb-12">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-2 h-8 bg-primary rounded-full shadow-[0_0_10px_rgba(139,92,246,0.5)]" />
-              <h2 className="text-3xl font-black tracking-tight text-foreground">
+      <div className="glass-card rounded-2xl p-6 shadow-2xl shadow-primary/5">
+        <div className="flex flex-col lg:flex-row items-start justify-between gap-5 mb-6">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-2 h-6 bg-primary rounded-full shadow-[0_0_10px_rgba(139,92,246,0.5)] shrink-0" />
+              <h2 className="text-base font-black tracking-tight text-foreground">
                 {typedPlan.target_jd_title ?? t("defaultTitle")}
               </h2>
             </div>
-            <p className="text-sm font-medium text-muted-foreground leading-relaxed max-w-2xl">{typedPlan.summary}</p>
+            <p className="text-sm font-medium text-muted-foreground leading-relaxed">{typedPlan.summary}</p>
           </div>
-          
-          <div className="flex flex-wrap gap-3">
+
+          <div className="flex flex-wrap gap-2 shrink-0">
             <button
               onClick={handleCopy}
-              className="px-6 py-3 border border-border bg-background text-foreground font-bold text-sm rounded-2xl hover:bg-muted transition-all"
+              className="px-4 py-2 border border-border bg-background text-foreground font-bold text-sm rounded-xl hover:bg-muted transition-all"
             >
               {copied ? t("copied") : t("copyMarkdown")}
             </button>
             {!hideChat && (
               <button
                 onClick={onStartChat}
-                className="px-6 py-3 bg-primary text-primary-foreground font-bold text-sm rounded-2xl hover:opacity-90 transition-all shadow-xl shadow-primary/20"
+                className="px-4 py-2 bg-primary text-primary-foreground font-bold text-sm rounded-xl hover:opacity-90 transition-all shadow-xl shadow-primary/20"
               >
                 {t("chatButton")}
               </button>
@@ -537,7 +538,7 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-6 text-xs font-black uppercase tracking-widest text-primary/60 mb-12">
+        <div className="flex flex-wrap gap-4 text-xs font-black uppercase tracking-widest text-primary/60 mb-6">
           <span className="flex items-center gap-2">
             <span className="opacity-50">{t("timeline")}:</span>
             {typedPlan.start_date} — {typedPlan.end_date}
@@ -566,18 +567,18 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
       </div>
 
       {/* Weekly protocol */}
-      <div className="grid grid-cols-1 gap-6">
+      <div className="grid grid-cols-1 gap-4">
         {typedPlan.weeks.map((week) => (
           <div
             key={week.week_number}
             className={cn(
-              "glass-card rounded-[32px] overflow-hidden transition-all duration-500",
+              "glass-card rounded-2xl overflow-hidden transition-all duration-500",
               expandedWeeks.has(week.week_number) ? "ring-2 ring-primary/20 shadow-2xl" : "opacity-80"
             )}
           >
             {/* Week header */}
             <button
-              className="w-full flex items-center justify-between p-8 text-left hover:bg-primary/5 transition-colors group"
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-primary/5 transition-colors group"
               onClick={() =>
                 setExpandedWeeks((prev) => {
                   const next = new Set(prev);
@@ -590,28 +591,28 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
                 })
               }
             >
-              <div className="flex items-center gap-6">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className={cn(
-                  "w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black transition-all",
+                  "w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black transition-all shrink-0",
                   expandedWeeks.has(week.week_number) ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" : "bg-muted text-muted-foreground"
                 )}>
                   {week.week_number}
                 </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary mb-1">{t("cycleLabel", { n: week.week_number })}</p>
-                  <p className="text-xl font-black tracking-tight text-foreground group-hover:text-primary transition-colors">{week.theme}</p>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary mb-0.5">{t("cycleLabel", { n: week.week_number })}</p>
+                  <p className="text-sm font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">{week.theme}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
+              <div className="flex items-center gap-2 shrink-0 ml-2">
+                <div className="text-right hidden sm:block">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{t("protocolsCount", { count: week.todos.length })}</p>
-                  <p className="text-[9px] font-bold text-primary mt-1">{week.milestone || t("defaultMilestone")}</p>
+                  <p className="text-[9px] font-bold text-primary mt-0.5 max-w-[120px] truncate">{week.milestone || t("defaultMilestone")}</p>
                 </div>
                 <div className={cn(
-                  "w-8 h-8 rounded-full border border-border flex items-center justify-center transition-transform",
+                  "w-7 h-7 rounded-full border border-border flex items-center justify-center transition-transform text-muted-foreground",
                   expandedWeeks.has(week.week_number) ? "rotate-180" : ""
                 )}>
-                  ▼
+                  <ChevronDown className="w-4 h-4" />
                 </div>
               </div>
             </button>
@@ -619,46 +620,46 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
             {/* Todo list */}
             <AnimatePresence>
               {expandedWeeks.has(week.week_number) && (
-                <motion.div 
+                <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="px-8 pb-8 pt-2 space-y-4">
+                  <div className="px-4 pb-4 pt-2 space-y-3">
                     {week.todos.map((todo) => (
-                      <div 
-                        key={todo.id} 
+                      <div
+                        key={todo.id}
                         className={cn(
-                          "group/item p-6 rounded-2xl border transition-all",
+                          "group/item p-4 rounded-xl border transition-all",
                           todo.done ? "bg-primary/5 border-primary/20 opacity-60" : "bg-background border-border hover:border-primary/30"
                         )}
                       >
-                        <div className="flex items-start gap-6">
-                          <label className="relative flex items-center cursor-pointer">
+                        <div className="flex items-start gap-3">
+                          <label className="relative flex items-center cursor-pointer shrink-0 mt-0.5">
                             <input
                               type="checkbox"
                               checked={todo.done}
                               onChange={(e) => onTodoToggle(week.week_number, todo.id, e.target.checked)}
                               className="peer sr-only"
                             />
-                            <div className="w-6 h-6 border-2 border-muted-foreground/30 rounded-lg peer-checked:bg-primary peer-checked:border-primary transition-all shadow-sm" />
-                            <div className="absolute inset-0 flex items-center justify-center text-white opacity-0 peer-checked:opacity-100 transition-opacity">
+                            <div className="w-5 h-5 border-2 border-muted-foreground/30 rounded-md peer-checked:bg-primary peer-checked:border-primary transition-all shadow-sm" />
+                            <div className="absolute inset-0 flex items-center justify-center text-white opacity-0 peer-checked:opacity-100 transition-opacity text-xs">
                               ✓
                             </div>
                           </label>
-                          
+
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-4 mb-2">
+                            <div className="flex items-start justify-between gap-2 mb-1">
                               <h4 className={cn(
-                                "font-bold text-foreground transition-all",
-                                todo.done ? "line-through text-muted-foreground" : "text-lg"
+                                "text-sm font-bold text-foreground transition-all leading-snug",
+                                todo.done && "line-through text-muted-foreground"
                               )}>
                                 {todo.title}
                               </h4>
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2 shrink-0">
                                 <span className={cn(
-                                  "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border",
+                                  "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border",
                                   todo.priority === "high" ? "bg-destructive/10 text-destructive border-destructive/20" : "bg-muted text-muted-foreground border-border"
                                 )}>
                                   {todo.priority}
@@ -669,7 +670,7 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
                               </div>
                             </div>
                             {todo.description && (
-                              <p className="text-sm font-medium text-muted-foreground leading-relaxed">{todo.description}</p>
+                              <p className="text-sm text-muted-foreground leading-relaxed">{todo.description}</p>
                             )}
                           </div>
                         </div>
