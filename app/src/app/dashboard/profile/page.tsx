@@ -28,6 +28,8 @@ interface PlanRow {
   target_role: string;
   target_company: string | null;
   created_at: string;
+  application_status: string | null;
+  notes: string | null;
   resumes: unknown;
   gap_analyses: unknown;
   roadmaps: unknown;
@@ -77,7 +79,7 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
     supabase
       .from("career_plans")
       .select(
-        "id, target_role, target_company, created_at, " +
+        "id, target_role, target_company, created_at, application_status, notes, " +
         "resumes(created_at), " +
         "gap_analyses(summary_json), roadmaps(phases_json)"
       )
@@ -146,6 +148,8 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
       planOptions={planOptions}
       selectedPlanId={plan?.id ?? null}
       reportBasis={reportBasis}
+      applicationStatus={plan?.application_status ?? null}
+      notes={plan?.notes ?? null}
     />
   );
 }
