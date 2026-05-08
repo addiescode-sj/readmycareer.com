@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useTranslations } from "next-intl";
+import Image from "next/image";
+import { useTranslations, useLocale } from "next-intl";
 import { useSession } from "@/hooks/useSession";
 import { AnalysisProgressOverlay } from "./ui/AnalysisProgressOverlay";
 
@@ -11,6 +12,7 @@ const JD_TEXT_MAX_LENGTH = 10000;
 export default function InitializeWorkspace() {
   const t = useTranslations("GoalSetting");
   const tWork = useTranslations("InitializeWorkspace");
+  const locale = useLocale() as "ko" | "en";
   const { resumeJson, setResumeJson, setAnalysisResult } = useSession();
 
   const [isDragging, setIsDragging] = useState(false);
@@ -30,12 +32,12 @@ export default function InitializeWorkspace() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
   const STEP_PROGRESS: Record<string, number> = {
-    reference_search:      15,
+    reference_search: 15,
     reference_search_done: 30,
-    cache:                 45,
-    gap_analysis:          62,
-    planning:              80,
-    done:                  100,
+    cache: 45,
+    gap_analysis: 62,
+    planning: 80,
+    done: 100,
   };
 
   // File Upload Logic
@@ -153,6 +155,7 @@ export default function InitializeWorkspace() {
           jdText,
           durationWeeks: durationWeeks as number,
           startDate,
+          locale,
         }),
       });
 
@@ -176,11 +179,11 @@ export default function InitializeWorkspace() {
         for (const part of parts) {
           const lines = part.split("\n");
           const eventLine = lines.find((l) => l.startsWith("event:"));
-          const dataLine  = lines.find((l) => l.startsWith("data:"));
+          const dataLine = lines.find((l) => l.startsWith("data:"));
           if (!eventLine || !dataLine) continue;
 
           const event = eventLine.replace("event:", "").trim();
-          const data  = JSON.parse(dataLine.replace("data:", "").trim()) as Record<string, unknown>;
+          const data = JSON.parse(dataLine.replace("data:", "").trim()) as Record<string, unknown>;
 
           if (event === "progress") {
             const step = (data["step"] as string) ?? "";
@@ -221,8 +224,8 @@ export default function InitializeWorkspace() {
       <header className="p-6 border-b border-border bg-white/50 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/20">
-              <span className="text-primary font-bold text-lg">SI</span>
+            <div className="w-10 h-10 rounded-xl overflow-hidden">
+              <Image src="/logo.svg" alt="readmycareer logo" width={40} height={40} className="w-full h-full object-cover" />
             </div>
             <div>
               <h1 className="font-semibold text-foreground text-sm leading-tight">readmycareer.com</h1>
@@ -263,11 +266,10 @@ export default function InitializeWorkspace() {
               </div>
 
               <div
-                className={`flex-1 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all duration-300 ${
-                  isDragging
+                className={`flex-1 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all duration-300 ${isDragging
                     ? "border-primary bg-primary/5 scale-[0.99]"
                     : "border-border hover:border-primary/50 hover:bg-muted/30"
-                }`}
+                  }`}
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={(e) => {

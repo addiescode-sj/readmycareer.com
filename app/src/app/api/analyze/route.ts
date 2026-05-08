@@ -11,6 +11,7 @@ const AnalyzeSchema = z.object({
   jdText: z.string().min(50).max(10000),
   durationWeeks: z.number().int().min(1).max(24),
   startDate: z.string().min(1).max(30),
+  locale: z.enum(["ko", "en"]).optional(),
 });
 
 const MAX_BODY_BYTES = 500_000; // 500 KB — covers resumeJson + jdText + metadata
@@ -108,8 +109,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const locale = detectLocale(req.headers.get("accept-language"));
-
   let body: z.infer<typeof AnalyzeSchema>;
   try {
     const raw = await req.json();
@@ -120,6 +119,10 @@ export async function POST(req: NextRequest) {
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
+
+  // Body locale takes precedence — it reflects the app's active UI language selected by the user.
+  // Accept-Language is only used as a fallback for clients that don't send the locale field.
+  const locale = body.locale ?? detectLocale(req.headers.get("accept-language"));
 
   const { resumeJson, targetRole, targetCompany, jdText, durationWeeks, startDate } = body;
 
