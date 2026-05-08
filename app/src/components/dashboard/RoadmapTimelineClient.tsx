@@ -99,7 +99,7 @@ export function RoadmapTimelineClient({
 
   return (
     <>
-      <div className="flex flex-col gap-6 h-[calc(100vh-theme(spacing.32))] min-h-0 min-w-[320px] overflow-y-auto pr-2">
+      <div className="flex flex-col gap-6 min-w-0">
         <div className="flex flex-col gap-6">
 
           {/* Header */}
@@ -107,11 +107,11 @@ export function RoadmapTimelineClient({
             title={t("title")}
             subtitle={planTitle}
             action={planOptions.length > 1 ? (
-              <div className="relative">
+              <div className="relative w-full max-w-full">
                 <select
                   value={selectedPlanId}
                   onChange={(e) => handlePlanChange(e.target.value)}
-                  className="appearance-none text-sm font-semibold bg-muted/50 border border-border rounded-xl pl-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                  className="w-full appearance-none text-sm font-semibold bg-muted/50 border border-border rounded-xl pl-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
                   aria-label={t("selectPlan")}
                 >
                   {planOptions.map((opt) => (
@@ -161,8 +161,7 @@ export function RoadmapTimelineClient({
           {/* Horizontal scrollable week cards */}
           <div
             ref={scrollRef}
-            className="flex gap-4 overflow-x-auto pt-1 pb-4 snap-x snap-mandatory"
-            style={{ scrollbarColor: "hsl(var(--outline-variant)) transparent", scrollbarWidth: "thin" }}
+            className="flex gap-4 overflow-x-auto pt-1 pb-4 snap-x snap-mandatory no-scrollbar"
           >
             {weeks.map((week, i) => {
               const phase = getPhase(i, weeks.length);

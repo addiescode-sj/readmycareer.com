@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import AppSidebar from "./AppSidebar";
+import { Logo } from "../ui/Logo";
 
 const MOBILE_BREAKPOINT = 1024;
 
@@ -50,7 +51,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, [open]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen w-full min-w-0 overflow-hidden bg-background">
       {/* Mobile backdrop */}
       {open && (
         <div
@@ -61,7 +62,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
       <AppSidebar open={open} onToggle={() => setOpen((v) => !v)} />
 
-      <main className="flex-1 overflow-y-auto bg-muted/30">
+      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-muted/30 no-scrollbar">
         {/* Mobile top bar */}
         <div className="lg:hidden flex items-center gap-3 px-4 h-14 border-b border-border/50 bg-white/80 backdrop-blur-xl sticky top-0 z-30">
           <button
@@ -71,9 +72,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="w-7 h-7 bg-primary rounded-xl flex items-center justify-center shadow-sm">
-            <span className="text-primary-foreground font-black text-xs">SI</span>
-          </div>
+          <Logo size={28} className="rounded-xl shadow-sm" />
           <span className="font-black text-sm tracking-tight text-foreground">readmycareer</span>
         </div>
 

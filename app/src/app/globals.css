@@ -143,6 +143,19 @@
   box-shadow: 0 0 20px 0 rgba(139, 92, 246, 0.25);
 }
 
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+select {
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
 .synthetic-glow-lg {
   box-shadow: 0 0 30px 4px rgba(139, 92, 246, 0.3);
 }
