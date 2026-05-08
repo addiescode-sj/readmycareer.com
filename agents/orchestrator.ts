@@ -445,10 +445,12 @@ export async function runCareerAnalysis(
   const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GOOGLE_API_KEY or GEMINI_API_KEY is not set.");
 
+  // Declared as a leading directive so it appears before the JD text in every prompt.
+  // Placing it after the JD risks the model matching the JD's language instead of the user's.
   const langDirective =
     locale === "en"
-      ? "\n\n⚠️ LANGUAGE: Write ALL natural-language text fields in English."
-      : "\n\n⚠️ LANGUAGE: Write ALL natural-language text fields in Korean (한국어).";
+      ? "⚠️ OUTPUT LANGUAGE REQUIREMENT: You MUST write ALL natural-language text fields (rationale, summary, evidence, theme, milestone, todo titles/descriptions) in English regardless of the language of the Job Description or resume."
+      : "⚠️ 출력 언어 요구사항: JD나 이력서의 언어에 관계없이, 모든 자연어 텍스트 필드(rationale, summary, evidence, theme, milestone, todo 제목/설명)를 반드시 한국어로 작성하세요.";
 
   // ── Step 0: Prepare resume cache ─────────────────────────────────────────
   // Strip personal contact info — not needed for analysis, reduces token usage.
@@ -471,6 +473,8 @@ export async function runCareerAnalysis(
 ${JSON.stringify(resumeForAnalysis, null, 2)}`;
 
       const prompt = `
+${langDirective}
+
 Follow ALL 8 phases in your instruction exactly. Work through each phase in order.
 Do NOT skip Phase 3 (Skill-Level Matching) — iterate over EVERY item in JD_REQUIRED and JD_PREFERRED.
 Output JSON only — no markdown, no prose.
@@ -495,7 +499,6 @@ ${resumeSection}
 
 ## Job Description:
 ${jdText}
-${langDirective}
 ${retryFeedback}
 `.trim();
 
@@ -528,6 +531,8 @@ ${retryFeedback}
   const careerPlanData = await runWithQualityGate<any>(
     (retryFeedback) => {
       const prompt = `
+${langDirective}
+
 Based on the target company/role, gap analysis, and career trend context below, output a ${durationWeeks}-week career plan as JSON only.
 
 ## User-Specified Target (do NOT change)
@@ -568,7 +573,6 @@ ${
 }
 
 Start date: ${startDate} / Duration: ${durationWeeks} weeks
-${langDirective}
 ${retryFeedback}
 `.trim();
 

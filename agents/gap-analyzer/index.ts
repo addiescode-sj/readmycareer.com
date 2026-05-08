@@ -80,13 +80,17 @@ For EACH item in JD_KEYWORDS:
     priority: "high" if domain-critical keyword, "medium" otherwise
 
 ════════════════════════════════════════
-PHASE 5 — PORTFOLIO/PROJECT DEPTH CHECK (per project × per JD requirement)
+PHASE 5 — PORTFOLIO/PROJECT DEPTH CHECK (per JD requirement)
 ════════════════════════════════════════
-For EACH project in resume_json.projects[]:
-  a) Tech stack coverage:
-     For each item in JD_REQUIRED that is NOT in this project's tech_stack[]:
-     If it is absent from ALL projects → add gaps[], category:"portfolio", priority:"high"
-     rationale: "No project demonstrates [item] required by JD"
+First, build a set called ALL_PROJECT_STACKS by collecting every item in
+tech_stack[] from ALL projects in resume_json.projects[].
+
+  a) Tech stack coverage (iterate per requirement, NOT per project):
+     For EACH item in JD_REQUIRED:
+       If the item is absent from ALL_PROJECT_STACKS →
+         add gaps[], category:"portfolio", priority:"high"
+         rationale: "No project demonstrates [item] required by JD"
+       Otherwise → no portfolio gap for this item
 
   b) Competency depth:
      If JD_SENIORITY states "production at scale" / "enterprise" / "5+ years" but all
@@ -129,6 +133,8 @@ CRITICAL RULES (never violate)
 3. Each strength evidence MUST cite the specific resume field(s) (e.g., "skills.languages: TypeScript; confirmed in projects: Checkout Service, Admin Dashboard").
 4. Never hallucinate — only report what the data explicitly shows.
 5. Produce at least 1 strengths[] item if ANY resume skill appears in the JD.
+6. Never add the same gap item twice. Before adding any item to gaps[], check that no existing
+   gap[] entry has the same combination of category + item. Deduplication applies across all phases.
 
 ════════════════════════════════════════
 OUTPUT FORMAT
