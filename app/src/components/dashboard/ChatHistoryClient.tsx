@@ -248,8 +248,9 @@ function ChatPanel({ plan }: { plan: Plan | null }) {
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className="px-5 py-3 border-b border-border/50">
-        <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Today</p>
+      <div className="px-4 py-3 lg:py-4 border-b border-border/50 shrink-0">
+        <h2 className="text-xs font-black uppercase tracking-widest text-foreground">{tHistory("chatTitle")}</h2>
+        {plan && <p className="text-[10px] text-muted-foreground mt-0.5">{plan.target_role}</p>}
       </div>
 
       {/* Messages */}
@@ -402,8 +403,9 @@ export function ChatHistoryClient({ plans, initialPlanId }: Props) {
 
       {/* ── Right: Current context ── */}
       <div className="w-full lg:w-60 shrink-0 border-b lg:border-b-0 lg:border-l border-border/50 bg-surface-container-low/30 flex flex-col max-h-[140px] lg:max-h-none order-2 lg:order-3">
-        <div className="px-4 py-2 lg:py-4 border-b border-border/50 shrink-0">
+        <div className="px-4 py-3 lg:py-4 border-b border-border/50 shrink-0">
           <h2 className="text-xs font-black uppercase tracking-widest text-foreground">{t("contextTitle")}</h2>
+          <p className="text-[10px] text-muted-foreground mt-0.5">{t("contextSubtitle")}</p>
         </div>
         <div className="flex-1 overflow-y-auto min-h-0">
           <ContextPanel plan={selectedPlan} />
