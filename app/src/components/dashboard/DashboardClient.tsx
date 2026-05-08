@@ -9,6 +9,7 @@ import { SignOutButton } from "./SignOutButton";
 import { useTranslations, useLocale } from "next-intl";
 
 import { CompetencyRadar } from "@/components/ui/CompetencyRadar";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 interface GapAnalysis {
   competencies: Array<{ name: string; score: number }>;
@@ -307,33 +308,28 @@ export function DashboardClient({ profile, initialPlans }: Props) {
   return (
     <div className="min-h-screen bg-transparent">
       {/* Header */}
-      <div className="flex items-center justify-between mb-12">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-xl shadow-primary/20">
-            <span className="text-primary-foreground font-black text-xl tracking-tighter">SI</span>
+      <PageHeader
+        title={t("title")}
+        subtitle={t("subtitle")}
+        className="mb-12"
+        action={
+          <div className="flex items-center gap-4 bg-white/50 backdrop-blur-sm border border-border p-2 rounded-2xl pr-4">
+            {profile?.avatar_url && (
+              <img
+                src={profile.avatar_url}
+                alt={displayName}
+                width={40}
+                height={40}
+                className="rounded-xl border border-border shadow-sm"
+                referrerPolicy="no-referrer"
+              />
+            )}
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-foreground leading-none">{displayName}</span>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-black tracking-tight text-foreground">{t("title")}</h1>
-            <p className="text-sm font-medium text-muted-foreground">{t("subtitle")}</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 bg-white/50 backdrop-blur-sm border border-border p-2 rounded-2xl pr-4">
-          {profile?.avatar_url && (
-            <img
-              src={profile.avatar_url}
-              alt={displayName}
-              width={40}
-              height={40}
-              className="rounded-xl border border-border shadow-sm"
-              referrerPolicy="no-referrer"
-            />
-          )}
-          <div className="flex flex-col">
-            <span className="text-sm font-bold text-foreground leading-none">{displayName}</span>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Plan list */}
       {plans.length === 0 ? (

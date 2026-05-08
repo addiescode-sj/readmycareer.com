@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
 import { CompetencyRadar } from "@/components/ui/CompetencyRadar";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { createClient } from "@/lib/supabase/client";
 
 interface Competency {
@@ -148,15 +149,11 @@ export function CareerProfileClient({
   return (
     <div className="space-y-8 max-w-5xl">
       {/* Header */}
-      <div>
-        <h1 className="text-headline-lg font-bold text-foreground tracking-tight">{t("title")}</h1>
-        <p className="text-body-md text-muted-foreground mt-1">{t("subtitle")}</p>
-      </div>
-
-      {/* Plan Selector */}
-      {planOptions.length > 1 && (
-        <div className="px-6 py-4 flex justify-end">
-          <div className="relative shrink-0">
+      <PageHeader
+        title={t("title")}
+        subtitle={t("subtitle")}
+        action={planOptions.length > 1 ? (
+          <div className="relative">
             <select
               value={selectedPlanId ?? ""}
               onChange={(e) => handlePlanChange(e.target.value)}
@@ -175,8 +172,8 @@ export function CareerProfileClient({
               </svg>
             </div>
           </div>
-        </div>
-      )}
+        ) : undefined}
+      />
 
       {/* Identity card */}
       <div className="glass-card rounded-2xl p-8 flex items-center gap-6 synthetic-glow">

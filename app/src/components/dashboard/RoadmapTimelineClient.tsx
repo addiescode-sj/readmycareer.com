@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AICoachChat } from "@/components/ui/AICoachChat";
 import { RoadmapVelocityChart } from "@/components/ui/RoadmapVelocityChart";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 interface Todo {
   done: boolean;
@@ -102,15 +103,11 @@ export function RoadmapTimelineClient({
         <div className="flex flex-col gap-6">
 
           {/* Header */}
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-headline-lg font-bold text-foreground tracking-tight">{t("title")}</h1>
-              <p className="text-body-md text-muted-foreground mt-1">{planTitle}</p>
-            </div>
-
-            {/* Plan selector */}
-            {planOptions.length > 1 && (
-              <div className="relative shrink-0">
+          <PageHeader
+            title={t("title")}
+            subtitle={planTitle}
+            action={planOptions.length > 1 ? (
+              <div className="relative">
                 <select
                   value={selectedPlanId}
                   onChange={(e) => handlePlanChange(e.target.value)}
@@ -129,8 +126,8 @@ export function RoadmapTimelineClient({
                   </svg>
                 </div>
               </div>
-            )}
-          </div>
+            ) : undefined}
+          />
 
           {/* Phase progress bar */}
           <div className="glass-card rounded-2xl p-5 space-y-3">
