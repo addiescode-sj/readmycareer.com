@@ -3,22 +3,39 @@ import { getTranslations } from "next-intl/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { RoadmapTimelineClient } from "@/components/dashboard/RoadmapTimelineClient";
 
-export default async function RoadmapPage() {
+interface RoadmapPageProps {
+  searchParams: Promise<{ planId?: string }>;
+}
+
+export default async function RoadmapPage({ searchParams }: RoadmapPageProps) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/");
 
   const t = await getTranslations("DashboardRoadmap");
+  const resolvedParams = await searchParams;
+  const selectedPlanId = resolvedParams.planId;
 
-  const { data: plan } = await supabase
+  const { data: plans } = await supabase
     .from("career_plans")
-    .select("id, title, target_role, target_company, roadmaps(phases_json, week_count), gap_analyses(summary_json)")
+    .select("id, title, target_role, target_company, created_at, roadmaps(phases_json, week_count), gap_analyses(summary_json)")
     .eq("user_id", user.id)
-    .eq("status", "active")
+    .neq("status", "archived")
     .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+    .limit(3);
+
+  const safePlans = plans ?? [];
+
+  const plan = selectedPlanId
+    ? (safePlans.find((p) => p.id === selectedPlanId) ?? safePlans[0] ?? null)
+    : (safePlans[0] ?? null);
+
+  const planOptions = safePlans.map((p) => ({
+    id: p.id,
+    label: p.target_role,
+    createdAt: p.created_at,
+  }));
 
   if (!plan) {
     return (
@@ -50,6 +67,8 @@ export default async function RoadmapPage() {
       targetRole={plan.target_role}
       targetCompany={plan.target_company ?? null}
       gapAnalysis={gapRaw?.summary_json as Record<string, unknown> | null ?? null}
+      planOptions={planOptions}
+      selectedPlanId={plan.id}
     />
   );
 }
