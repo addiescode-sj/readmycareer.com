@@ -59,6 +59,8 @@ THRESHOLDS: dict[str, float] = {
     "date_consistency_rate": 1.00,
     "p95_latency_s": 30.0,           # must be below this value to PASS
     "avg_cost_usd": 0.01,            # must be below this value to PASS
+    "match_score_in_range_rate": 0.80,
+    "category_diversity_rate": 1.00,
 }
 
 # ── JSON schema definition ────────────────────────────────────────────────────
@@ -82,7 +84,27 @@ CAREER_PLAN_SCHEMA: dict[str, Any] = {
             ],
             "properties": {
                 "target_role": {"type": "string", "minLength": 1},
-                "strengths": {"type": "array"},
+                "strengths": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["id", "category", "item", "evidence"],
+                        "properties": {
+                            "id": {"type": "string"},
+                            "category": {
+                                "enum": [
+                                    "skill",
+                                    "experience",
+                                    "certification",
+                                    "portfolio",
+                                    "keyword",
+                                ]
+                            },
+                            "item": {"type": "string"},
+                            "evidence": {"type": "string"},
+                        },
+                    },
+                },
                 "gaps": {
                     "type": "array",
                     "items": {
@@ -286,6 +308,8 @@ def run_fixture(fixture: dict, client: httpx.Client, endpoint: str) -> dict:
         "gap_faithfulness": None,
         "plan_completeness": False,
         "date_consistent": False,
+        "match_score_in_range": False,
+        "category_diversity_ok": False,
         "overall_match_score": None,
         "prompt_tokens": 0,
         "completion_tokens": 0,
@@ -336,6 +360,30 @@ def run_fixture(fixture: dict, client: httpx.Client, endpoint: str) -> dict:
     result["plan_completeness"] = check_plan_completeness(data)
     result["date_consistent"] = check_date_consistency(data)
 
+    # Match score range check
+    expected_range = fixture.get("expected_match_score_range")
+    if expected_range and result["overall_match_score"] is not None:
+        lo, hi = expected_range[0], expected_range[1]
+        result["match_score_in_range"] = lo <= result["overall_match_score"] <= hi
+
+    # Category diversity: ≥3 distinct categories across combined gaps + strengths,
+    # and all expected_categories must be present if specified in the fixture.
+    gap_analysis = data.get("gap_analysis", {})
+    all_categories: set[str] = set()
+    for item in gap_analysis.get("gaps", []):
+        cat = item.get("category", "")
+        if cat:
+            all_categories.add(cat)
+    for item in gap_analysis.get("strengths", []):
+        cat = item.get("category", "")
+        if cat:
+            all_categories.add(cat)
+    expected_cats = set(fixture.get("expected_categories", []))
+    result["category_diversity_ok"] = (
+        len(all_categories) >= 3
+        and (not expected_cats or expected_cats.issubset(all_categories))
+    )
+
     return result
 
 
@@ -383,6 +431,16 @@ def compute_metrics(results: list[dict]) -> dict:
         "p50_latency_s": pct(latencies, 50),
         "p95_latency_s": pct(latencies, 95),
         "avg_cost_usd": sum(r["cost_usd"] for r in results) / n,
+        "match_score_in_range_rate": (
+            sum(1 for r in successful if r.get("match_score_in_range", False)) / len(successful)
+            if successful
+            else 0.0
+        ),
+        "category_diversity_rate": (
+            sum(1 for r in successful if r.get("category_diversity_ok", False)) / len(successful)
+            if successful
+            else 0.0
+        ),
         "total_fixtures": n,
         "successful_fixtures": len(successful),
     }
@@ -459,6 +517,18 @@ def print_summary(metrics: dict, all_pass: bool) -> None:
             f"< ${THRESHOLDS['avg_cost_usd']}",
             _pass_fail(metrics["avg_cost_usd"] <= THRESHOLDS["avg_cost_usd"]),
         ],
+        [
+            "Match Score In Range",
+            f"{metrics['match_score_in_range_rate']:.2%}",
+            f">= {THRESHOLDS['match_score_in_range_rate']:.0%}",
+            _pass_fail(metrics["match_score_in_range_rate"] >= THRESHOLDS["match_score_in_range_rate"]),
+        ],
+        [
+            "Category Diversity (>=3 dims)",
+            f"{metrics['category_diversity_rate']:.2%}",
+            "= 100%",
+            _pass_fail(metrics["category_diversity_rate"] >= THRESHOLDS["category_diversity_rate"]),
+        ],
     ]
 
     print(
@@ -507,6 +577,8 @@ def all_thresholds_met(metrics: dict) -> bool:
         metrics["date_consistency_rate"] >= THRESHOLDS["date_consistency_rate"],
         metrics["p95_latency_s"] <= THRESHOLDS["p95_latency_s"],
         metrics["avg_cost_usd"] <= THRESHOLDS["avg_cost_usd"],
+        metrics["match_score_in_range_rate"] >= THRESHOLDS["match_score_in_range_rate"],
+        metrics["category_diversity_rate"] >= THRESHOLDS["category_diversity_rate"],
     ]
     # gap_faithfulness: skip check if NaN (judge was skipped)
     if not math.isnan(metrics["gap_faithfulness"]):
@@ -594,8 +666,10 @@ def main() -> int:
                     f"  {status_icon} HTTP {result['status_code']} | "
                     f"{result['latency_s']:.1f}s | "
                     f"Schema: {schema_status} | "
-                    f"todos/week≥3: {result['plan_completeness']} | "
-                    f"Date continuity: {result['date_consistent']}"
+                    f"todos/week>=3: {result['plan_completeness']} | "
+                    f"Date continuity: {result['date_consistent']} | "
+                    f"Score in range: {result.get('match_score_in_range', 'N/A')} | "
+                    f"Category diversity: {result.get('category_diversity_ok', 'N/A')}"
                 )
 
                 # LLM-as-judge

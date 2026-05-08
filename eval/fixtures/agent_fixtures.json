@@ -121,7 +121,8 @@
     "expected_match_score_range": [
       30,
       70
-    ]
+    ],
+    "expected_categories": ["skill", "experience", "keyword", "portfolio"]
   },
   {
     "id": "fx_python_backend_to_nodejs",
@@ -259,7 +260,8 @@
     "expected_match_score_range": [
       55,
       85
-    ]
+    ],
+    "expected_categories": ["skill", "experience", "keyword"]
   },
   {
     "id": "fx_fullstack_global_tech",
@@ -415,6 +417,7 @@
     "expected_match_score_range": [
       50,
       85
-    ]
+    ],
+    "expected_categories": ["skill", "experience", "keyword", "portfolio"]
   }
 ]
