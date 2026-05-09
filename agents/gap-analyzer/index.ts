@@ -155,8 +155,123 @@ Respond ONLY with valid JSON matching this schema exactly. No markdown, no prose
 }
 `.trim();
 
-// ─── GapAnalyzerAgent ─────────────────────────────────────────────────────────
+// ─── Locale-aware instruction builder ────────────────────────────────────────
+//
+// The base INSTRUCTION contains English template rationale text (e.g., "JD requires X but...").
+// Models strongly follow system-instruction examples regardless of user-prompt directives.
+// Appending the language requirement directly to the system instruction overrides that bias.
 
+// ─── Locale-aware instruction builder ────────────────────────────────────────
+//
+// Problem: the base INSTRUCTION contains English rationale template strings in Phase 3/5/6
+// (e.g. "JD requires [item] but it is absent from all resume skill fields...").
+// LLMs treat few-shot examples as the highest-authority signal and reproduce them literally,
+// so a trailing language directive alone is not sufficient.
+//
+// Solution: prepend a language block BEFORE Phase 1 (highest positional authority) AND
+// append another after the output format (final-instruction recency effect).
+// Both blocks include an explicit rationale rewrite example to break the English template bias.
+
+const LANG_PREFIX: Record<"ko" | "en", string> = {
+  ko: `
+════════════════════════════════════════
+⚠️ OUTPUT LANGUAGE — READ BEFORE ANY ANALYSIS (overrides all examples below)
+════════════════════════════════════════
+ALL natural-language text you write — including rationale, evidence, and summary fields —
+MUST be written in Korean (한국어). This applies regardless of whether the JD or resume is in English.
+
+Technical proper nouns (Python, TypeScript, CI/CD, LangGraph, AWS, etc.) may stay in English.
+Every explanatory sentence MUST be in Korean.
+
+Example of CORRECT Korean rationale:
+  "JD에서 Python 3년 이상의 경력을 필수로 요구하지만, 이력서의 모든 기술 스택 및 프로젝트에서 Python이 확인되지 않습니다."
+
+Example of WRONG English rationale (DO NOT produce this):
+  "JD requires 3+ years of Python experience, but it is absent from all resume skill fields."
+
+`,
+  en: `
+════════════════════════════════════════
+⚠️ OUTPUT LANGUAGE — READ BEFORE ANY ANALYSIS (overrides all examples below)
+════════════════════════════════════════
+ALL natural-language text (rationale, evidence, summary) MUST be in English.
+
+`,
+};
+
+const LANG_SUFFIX: Record<"ko" | "en", string> = {
+  ko: `
+
+════════════════════════════════════════
+⚠️ FINAL REMINDER — OUTPUT LANGUAGE
+════════════════════════════════════════
+Every rationale, evidence, and summary string MUST be in Korean (한국어).
+The English template strings shown in the phases above are structural guides only —
+write the ACTUAL text in Korean.
+`,
+  en: `
+
+════════════════════════════════════════
+⚠️ FINAL REMINDER — OUTPUT LANGUAGE
+════════════════════════════════════════
+Every rationale, evidence, and summary string MUST be in English.
+`,
+};
+
+// English rationale template strings present in the base INSTRUCTION.
+// For Korean locale these are replaced with Korean equivalents so the model
+// cannot fall back to reproducing them literally in English.
+const KO_TEMPLATE_REPLACEMENTS: Array<[string, string]> = [
+  // Phase 3 — required skill gap
+  [
+    `rationale: "JD requires [item] but it is absent from all resume skill fields and projects"`,
+    `rationale: "[item]은(는) JD 필수 요건이나 이력서의 기술 스택 및 모든 프로젝트에서 확인되지 않습니다"`,
+  ],
+  // Phase 5a — portfolio gap
+  [
+    `rationale: "No project demonstrates [item] required by JD"`,
+    `rationale: "[item]을(를) 활용한 프로젝트가 이력서에 없습니다"`,
+  ],
+  // Phase 5b — production-scale gap
+  [
+    `rationale: "Projects do not demonstrate production-scale experience required by JD"`,
+    `rationale: "JD가 요구하는 프로덕션 규모의 경험을 증명하는 프로젝트가 없습니다"`,
+  ],
+  // Phase 6 — seniority gap
+  [
+    `rationale: "JD requires [N]+ years of [skill]; resume shows approximately [X] years"`,
+    `rationale: "JD는 [skill] [N]년 이상을 요구하나, 이력서상 경력은 약 [X]년으로 추정됩니다"`,
+  ],
+  // OUTPUT FORMAT example — rationale
+  [
+    `"rationale": "JD requires GraphQL but it is absent from all resume skill fields and project tech stacks"`,
+    `"rationale": "GraphQL은 JD 필수 요건이나 이력서의 모든 기술 스택 및 프로젝트에서 확인되지 않습니다"`,
+  ],
+  // OUTPUT FORMAT example — summary
+  [
+    `"summary": "Strong TypeScript and React base; gaps in GraphQL, system design at scale, and CI/CD ownership"`,
+    `"summary": "TypeScript와 React 기반이 탄탄하나, GraphQL, 대규모 시스템 설계, CI/CD 소유 경험에 격차가 있습니다"`,
+  ],
+  // CRITICAL RULES section — evidence example
+  [
+    `(e.g., "skills.languages: TypeScript; confirmed in projects: Checkout Service, Admin Dashboard")`,
+    `(예: "skills.languages: TypeScript; 프로젝트 확인됨: Checkout Service, Admin Dashboard")`,
+  ],
+];
+
+export function getGapAnalyzerInstruction(locale: "ko" | "en"): string {
+  if (locale === "en") {
+    return LANG_PREFIX.en + INSTRUCTION + LANG_SUFFIX.en;
+  }
+  // Replace all English template strings with Korean equivalents before wrapping.
+  let instruction = INSTRUCTION;
+  for (const [en, ko] of KO_TEMPLATE_REPLACEMENTS) {
+    instruction = instruction.replace(en, ko);
+  }
+  return LANG_PREFIX.ko + instruction + LANG_SUFFIX.ko;
+}
+
+// Legacy export kept for any direct consumers of the base instruction
 export { INSTRUCTION as GAP_ANALYZER_INSTRUCTION };
 
 export const GapAnalyzerAgent = new LlmAgent({

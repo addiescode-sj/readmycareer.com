@@ -8,7 +8,7 @@ import {
   stringifyContent,
 } from "@google/adk";
 import { ChatQnAAgent } from "./chat-qna/index.js";
-import { GAP_ANALYZER_INSTRUCTION } from "./gap-analyzer/index.js";
+import { getGapAnalyzerInstruction } from "./gap-analyzer/index.js";
 import { PLANNER_INSTRUCTION } from "./planner/index.js";
 import {
   SESSION_KEYS,
@@ -455,8 +455,11 @@ export async function runCareerAnalysis(
   // ── Step 0: Prepare resume cache ─────────────────────────────────────────
   // Strip personal contact info — not needed for analysis, reduces token usage.
   const resumeForAnalysis = omitPersonal(resumeJson);
+  // Build locale-aware gap analyzer instruction so the language requirement is in the system
+  // instruction itself — models follow system-instruction examples more strongly than user-prompt directives.
+  const gapInstruction = getGapAnalyzerInstruction(locale ?? "ko");
   onProgress?.("cache");
-  const gapCacheName = await getOrCreateResumeCache(apiKey, GAP_ANALYZER_INSTRUCTION, resumeForAnalysis);
+  const gapCacheName = await getOrCreateResumeCache(apiKey, gapInstruction, resumeForAnalysis);
 
   // ── Step 1: Gap analysis (with quality gate) ─────────────────────────────
   // Uses the user-provided raw JD text directly for precise gap identification.
@@ -504,7 +507,7 @@ ${retryFeedback}
 
       return callGemini({
         apiKey,
-        systemInstruction: GAP_ANALYZER_INSTRUCTION,
+        systemInstruction: gapInstruction,
         userPrompt: prompt,
         cachedContentName: gapCacheName,
         maxOutputTokens: 8192,
