@@ -53,7 +53,13 @@
       "Bash(python3 -c \"import json; data = json.load\\(open\\('eval/fixtures/agent_fixtures.json'\\)\\); [print\\(f['id'], '->', f.get\\('expected_categories'\\)\\) for f in data]\")",
       "mcp__supabase__list_projects",
       "mcp__supabase__list_tables",
-      "mcp__supabase__apply_migration"
+      "mcp__supabase__apply_migration",
+      "Bash(curl -s http://localhost:3000 -o /dev/null -w \"%{http_code}\")",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "Bash(node /tmp/test-gap-language.mjs)",
+      "Bash(node -e ' *)",
+      "Bash(npm run *)"
     ],
     "additionalDirectories": [
       "/tmp",
