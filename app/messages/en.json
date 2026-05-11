@@ -105,7 +105,25 @@
     "architecturalCompletion": "Overall Completion",
     "cycleLabel": "Cycle {n}",
     "protocolsCount": "{count} Tasks",
-    "defaultMilestone": "General Optimization"
+    "defaultMilestone": "General Optimization",
+    "optimizeResume": "Optimize Resume",
+    "optimizingResume": "Generating...",
+    "optimizeResumeComplete": "✓ Resume Generated",
+    "optimizeResumeTooltip": "Complete all checklist items to generate your optimized resume"
+  },
+  "OptimizedResumeModal": {
+    "title": "Your Optimized Resume",
+    "generatedNote": "Generated based on your career plan progress and gap analysis",
+    "close": "Close",
+    "copyMarkdown": "Copy Markdown",
+    "copied": "Copied!",
+    "download": "Download .md",
+    "downloadPdf": "Save as PDF",
+    "sectionHighlights": "Key Highlights",
+    "sectionSkills": "Key Skills",
+    "sectionEducation": "Education",
+    "sectionAwardsCerts": "Awards & Certifications",
+    "sectionCoverLetter": "Cover Letter"
   },
   "ReturningUserGate": {
     "title": "Do you want to log in?",

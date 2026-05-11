@@ -51,7 +51,7 @@ function RunnerCharacter({ isRunning }: { isRunning: boolean }) {
   const dur = "0.38s";
   const frameA = isRunning ? { animation: `run-frame-a ${dur} steps(1,end) infinite` } : {};
   const frameB = isRunning ? { animation: `run-frame-b ${dur} steps(1,end) infinite` } : { opacity: 0 };
-  const bob    = isRunning ? { animation: `runner-stride ${dur} ease-in-out infinite` } : {};
+  const bob = isRunning ? { animation: `runner-stride ${dur} ease-in-out infinite` } : {};
 
   // Colors from user's SVG
   const cHair = "#1A1A1A";
@@ -62,16 +62,16 @@ function RunnerCharacter({ isRunning }: { isRunning: boolean }) {
 
   return (
     <svg width="42" height="42" viewBox="0 0 24 24" shapeRendering="crispEdges"
-         style={{ overflow: "visible", display: "block" }}>
+      style={{ overflow: "visible", display: "block" }}>
       <g style={bob}>
-        
+
         {/* Frame A: Back Limbs */}
         <g style={frameA}>
           {/* Back Arm (Down/Back) */}
           <rect x="9" y="10" width="1" height="1" fill={cSkin} />
           <rect x="8" y="11" width="1" height="2" fill={cSkin} />
           <rect x="7" y="13" width="1" height="1" fill={cSkin} />
-          
+
           {/* Back Leg (Kicked Back) */}
           <rect x="8" y="15" width="2" height="1" fill={cSkin} />
           <rect x="6" y="16" width="2" height="1" fill={cSkin} />
@@ -85,7 +85,7 @@ function RunnerCharacter({ isRunning }: { isRunning: boolean }) {
           <rect x="9" y="9" width="1" height="1" fill={cSkin} />
           <rect x="10" y="8" width="2" height="1" fill={cSkin} />
           <rect x="11" y="7" width="1" height="1" fill={cSkin} />
-          
+
           {/* Back Leg (Straight/Forward) shifted -3x from Front Leg */}
           <rect x="10" y="15" width="2" height="2" fill={cSkin} />
           <rect x="11" y="17" width="2" height="2" fill={cSkin} />
@@ -99,14 +99,14 @@ function RunnerCharacter({ isRunning }: { isRunning: boolean }) {
         <rect x="4" y="5" width="5" height="1" fill={cHair} />
         <rect x="3" y="6" width="6" height="1" fill={cHair} />
         <rect x="2" y="7" width="5" height="1" fill={cHair} />
-        
+
         {/* Head & Main Hair */}
         <rect x="10" y="3" width="5" height="1" fill={cHair} />
         <rect x="9" y="4" width="7" height="1" fill={cHair} />
         <rect x="9" y="5" width="2" height="3" fill={cHair} />
         <rect x="11" y="5" width="5" height="4" fill={cSkin} />
         <rect x="15" y="5" width="1" height="1" fill={cHair} />
-        
+
         {/* Torso (Orange Top) */}
         <rect x="10" y="9" width="4" height="4" fill={cTop} />
         <rect x="14" y="10" width="1" height="3" fill={cTop} />
@@ -121,7 +121,7 @@ function RunnerCharacter({ isRunning }: { isRunning: boolean }) {
           <rect x="15" y="9" width="1" height="1" fill={cSkin} />
           <rect x="16" y="8" width="2" height="1" fill={cSkin} />
           <rect x="17" y="7" width="1" height="1" fill={cSkin} />
-          
+
           {/* Front Leg (Straight/Forward) */}
           <rect x="13" y="15" width="2" height="2" fill={cSkin} />
           <rect x="14" y="17" width="2" height="2" fill={cSkin} />
@@ -135,7 +135,7 @@ function RunnerCharacter({ isRunning }: { isRunning: boolean }) {
           <rect x="15" y="10" width="1" height="1" fill={cSkin} />
           <rect x="14" y="11" width="1" height="2" fill={cSkin} />
           <rect x="13" y="13" width="1" height="1" fill={cSkin} />
-          
+
           {/* Front Leg (Kicked Back) shifted +4x from Back Leg */}
           <rect x="12" y="15" width="2" height="1" fill={cSkin} />
           <rect x="10" y="16" width="2" height="1" fill={cSkin} />
@@ -196,8 +196,8 @@ function WeekProgressBar({ weeks, overallPct }: {
                   w.pct === 100
                     ? "bg-primary shadow-[0_0_8px_rgba(107,56,212,0.5)]"
                     : w.pct > 0
-                    ? "bg-gradient-to-r from-primary/50 to-primary"
-                    : ""
+                      ? "bg-gradient-to-r from-primary/50 to-primary"
+                      : ""
                 )}
               />
             </div>
@@ -267,7 +267,7 @@ type SaveStatus = "idle" | "saving" | "saved" | "error" | "limit_reached";
 
 function SaveBanner() {
   const t = useTranslations("RoadmapView");
-  const { careerPlan, gapAnalysis, targetRole, targetCompany, jdText } = useSession();
+  const { careerPlan, gapAnalysis, targetRole, targetCompany, jdText, resumeJson } = useSession();
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [oauthLoading, setOauthLoading] = useState(false);
@@ -303,6 +303,7 @@ function SaveBanner() {
                 targetRole: targetRole ?? "",
                 targetCompany: targetCompany ?? "",
                 jdText,
+                resumeJson: resumeJson ?? undefined,
                 careerPlan,
                 gapAnalysis: gapAnalysis ?? {},
               }),
@@ -322,8 +323,8 @@ function SaveBanner() {
       }
     );
     return () => subscription.unsubscribe();
-  // Intentionally omit careerPlan/jdText from deps — snapshot is taken on SIGNED_IN
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentionally omit careerPlan/jdText from deps — snapshot is taken on SIGNED_IN
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function signInWithGoogle() {
@@ -347,6 +348,7 @@ function SaveBanner() {
           targetRole: targetRole ?? "",
           targetCompany: targetCompany ?? "",
           jdText,
+          resumeJson: resumeJson ?? undefined,
           careerPlan,
           gapAnalysis: gapAnalysis ?? {},
         }),
@@ -606,7 +608,7 @@ export default function RoadmapView({ plan, onStartChat, onTodoToggle, hideSaveB
               <div className="flex items-center gap-2 shrink-0 ml-2">
                 <div className="text-right hidden sm:block">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{t("protocolsCount", { count: week.todos.length })}</p>
-                  <p className="text-[9px] font-bold text-primary mt-0.5 max-w-[120px] truncate">{week.milestone || t("defaultMilestone")}</p>
+                  <p className="text-[9px] font-bold text-primary mt-0.5 max-w-[160px] truncate">{week.milestone || t("defaultMilestone")}</p>
                 </div>
                 <div className={cn(
                   "w-7 h-7 rounded-full border border-border flex items-center justify-center transition-transform text-muted-foreground",

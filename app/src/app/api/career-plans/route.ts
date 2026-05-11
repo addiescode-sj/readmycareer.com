@@ -25,6 +25,7 @@ const CareerPlanSaveSchema = z.object({
   targetRole: z.string().min(1).max(200),
   targetCompany: z.string().max(200).default(""),
   jdText: z.string().min(50).max(10000),
+  resumeJson: z.record(z.unknown()).optional(),
   careerPlan: z.object({
     plan_id: z.string(),
     summary: z.string(),
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { targetRole, targetCompany, jdText, careerPlan, gapAnalysis } = parsed.data;
+  const { targetRole, targetCompany, jdText, resumeJson, careerPlan, gapAnalysis } = parsed.data;
 
   // 1. Insert career_plans
   const formattedDate = new Intl.DateTimeFormat("ko-KR", {
@@ -102,6 +103,7 @@ export async function POST(request: Request) {
       target_role: targetRole,
       target_company: targetCompany,
       jd_text: jdText,
+      resume_json: resumeJson ?? null,
       duration_weeks: careerPlan.duration_weeks,
       start_date: careerPlan.start_date,
       end_date: careerPlan.end_date,

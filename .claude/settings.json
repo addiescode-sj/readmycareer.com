@@ -59,7 +59,10 @@
       "mcp__playwright__browser_take_screenshot",
       "Bash(node /tmp/test-gap-language.mjs)",
       "Bash(node -e ' *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(xargs kill *)",
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__execute_sql"
     ],
     "additionalDirectories": [
       "/tmp",

@@ -22,7 +22,7 @@ function GoogleIcon() {
 
 function PlanSaveHeader() {
   const t = useTranslations("RoadmapView");
-  const { careerPlan, gapAnalysis, targetRole, targetCompany, jdText } = useSession();
+  const { careerPlan, gapAnalysis, targetRole, targetCompany, jdText, resumeJson } = useSession();
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [oauthLoading, setOauthLoading] = useState(false);
@@ -51,6 +51,7 @@ function PlanSaveHeader() {
                 targetRole: targetRole ?? "",
                 targetCompany: targetCompany ?? "",
                 jdText,
+                resumeJson: resumeJson ?? undefined,
                 careerPlan,
                 gapAnalysis: gapAnalysis ?? {},
               }),

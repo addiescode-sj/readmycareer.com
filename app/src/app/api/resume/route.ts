@@ -309,9 +309,11 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        // Strip personal contact info and raw_text before sending to client
-        const { personal: _personal, raw_text: _rawText, ...resumeWithoutPersonal } = parsed;
-        send("result", resumeWithoutPersonal);
+        // Strip raw_text (large field, not needed by client) but keep personal info
+        // Personal info is needed so it can be persisted to career_plans.resume_json
+        // and later used by the resume optimizer. It is never written to sessionStorage.
+        const { raw_text: _rawText, ...resumeForClient } = parsed;
+        send("result", resumeForClient);
       } catch (err) {
         console.error("[/api/resume] Unexpected error:", err);
         send("error", { code: "UNKNOWN", message: "" });

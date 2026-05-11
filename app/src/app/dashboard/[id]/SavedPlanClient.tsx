@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { AICoachChat } from "@/components/ui/AICoachChat";
 import { CompetencyRadar } from "@/components/ui/CompetencyRadar";
 import RoadmapView from "@/components/RoadmapView";
+import { OptimizedResumeModal } from "@/components/OptimizedResumeModal";
 import { createClient } from "@/lib/supabase/client";
 
 interface Competency { name: string; score: number }
@@ -144,10 +145,33 @@ export default function SavedPlanClient({
 }) {
   const t = useTranslations("GapAnalysisDashboard");
   const tProfile = useTranslations("CareerProfile");
+  const tRoadmap = useTranslations("RoadmapView");
   const router = useRouter();
   const [plan, setPlan] = useState(careerPlan);
   const [chatOpen, setChatOpen] = useState(false);
+  const [isOptimizeLoading, setIsOptimizeLoading] = useState(false);
+  const [isOptimizeStatusLoading, setIsOptimizeStatusLoading] = useState(true);
+  const [isOptimizeComplete, setIsOptimizeComplete] = useState(false);
+  const [cachedOptimizedResume, setCachedOptimizedResume] = useState<Record<string, unknown> | null>(null);
+  const [optimizedResume, setOptimizedResume] = useState<Record<string, unknown> | null>(null);
   const supabase = createClient();
+
+  // Load existing optimized resume on mount so the button reflects persisted state
+  useEffect(() => {
+    supabase
+      .from("optimized_resumes")
+      .select("id, resume_data, markdown, meta, locale, created_at")
+      .eq("career_plan_id", planId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setCachedOptimizedResume(data as unknown as Record<string, unknown>);
+          setIsOptimizeComplete(true);
+        }
+        setIsOptimizeStatusLoading(false);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planId]);
 
   const competencies = plan.gap_analysis?.competencies ?? [];
   const findings = plan.gap_analysis?.findings ?? [];
@@ -164,6 +188,7 @@ export default function SavedPlanClient({
     allTodos.length > 0
       ? Math.round(allTodos.filter(t => t.done).length / allTodos.length * 100)
       : 0;
+  const isAllDone = allTodos.length > 0 && progressPct === 100;
 
   async function handleTodoToggle(
     weekNumber: number,
@@ -190,6 +215,32 @@ export default function SavedPlanClient({
     router.refresh();
   }
 
+  async function handleOptimizeResume() {
+    if (isOptimizeComplete && cachedOptimizedResume) {
+      setOptimizedResume(cachedOptimizedResume);
+      return;
+    }
+    setIsOptimizeLoading(true);
+    try {
+      const res = await fetch("/api/resume-optimizer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ career_plan_id: planId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error("[OptimizeResume] API error:", err);
+        return;
+      }
+      const data = await res.json();
+      setCachedOptimizedResume(data);
+      setOptimizedResume(data);
+      setIsOptimizeComplete(true);
+    } finally {
+      setIsOptimizeLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-10 pb-16 max-w-5xl">
       {/* Back nav */}
@@ -202,29 +253,63 @@ export default function SavedPlanClient({
 
       {/* ── GAP ANALYSIS ── */}
       <section className="space-y-6">
-        <div>
-          <h1 className="text-headline-lg font-bold text-foreground tracking-tight">
-            {t("title")}
-          </h1>
-          <p className="text-body-md text-muted-foreground mt-1">
-            <span className="text-label-sm uppercase tracking-widest">
-              {tProfile("targetRole")}:{" "}
-            </span>
-            <span className="font-semibold text-foreground">
-              {plan.target_role}
-            </span>
-            {plan.target_company && (
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-headline-lg font-bold text-foreground tracking-tight">
+              {t("title")}
+            </h1>
+            <p className="text-body-md text-muted-foreground mt-1">
+              <span className="text-label-sm uppercase tracking-widest">
+                {tProfile("targetRole")}:{" "}
+              </span>
+              <span className="font-semibold text-foreground">
+                {plan.target_role}
+              </span>
+              {plan.target_company && (
+                <>
+                  <span className="mx-2 text-muted-foreground/40">·</span>
+                  <span className="text-label-sm uppercase tracking-widest">
+                    {tProfile("targetCompany")}:{" "}
+                  </span>
+                  <span className="font-semibold text-foreground">
+                    {plan.target_company}
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+
+          <div className="relative group shrink-0">
+            {isOptimizeStatusLoading ? (
+              <div className="h-9 w-36 rounded-xl bg-muted animate-pulse" />
+            ) : (
               <>
-                <span className="mx-2 text-muted-foreground/40">·</span>
-                <span className="text-label-sm uppercase tracking-widest">
-                  {tProfile("targetCompany")}:{" "}
-                </span>
-                <span className="font-semibold text-foreground">
-                  {plan.target_company}
-                </span>
+                <button
+                  onClick={handleOptimizeResume}
+                  disabled={isOptimizeLoading || (!isOptimizeComplete && !isAllDone)}
+                  className={cn(
+                    "px-4 py-2 font-bold text-sm rounded-xl transition-all whitespace-nowrap",
+                    isOptimizeComplete
+                      ? "bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20"
+                      : isAllDone && !isOptimizeLoading
+                      ? "bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:opacity-90 shadow-xl shadow-primary/20"
+                      : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
+                  )}
+                >
+                  {isOptimizeLoading
+                    ? tRoadmap("optimizingResume")
+                    : isOptimizeComplete
+                    ? tRoadmap("optimizeResumeComplete")
+                    : tRoadmap("optimizeResume")}
+                </button>
+                {!isAllDone && !isOptimizeComplete && (
+                  <div className="absolute top-full right-0 mt-2 w-56 text-xs text-center bg-popover border border-border rounded-lg px-3 py-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 whitespace-normal">
+                    {tRoadmap("optimizeResumeTooltip")}
+                  </div>
+                )}
               </>
             )}
-          </p>
+          </div>
         </div>
 
         {/* Readiness gauge + Radar */}
@@ -313,6 +398,13 @@ export default function SavedPlanClient({
         targetCompany={plan.target_company}
         gapAnalysis={plan.gap_analysis as Record<string, unknown> | null}
       />
+
+      {optimizedResume && (
+        <OptimizedResumeModal
+          data={optimizedResume}
+          onClose={() => setOptimizedResume(null)}
+        />
+      )}
     </div>
   );
 }

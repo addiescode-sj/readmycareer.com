@@ -89,13 +89,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setState((prev) => {
         const next = updater(prev);
         try {
-          // Strip personal contact info from resumeJson before persisting to sessionStorage
-          const { personal: _personal, ...resumeJsonSafe } =
-            (next.resumeJson ?? {}) as Record<string, unknown> & { personal?: unknown };
-          const toStore = {
-            ...next,
-            resumeJson: next.resumeJson ? resumeJsonSafe : null,
-          };
+          // resumeJson is kept in-memory only; never persisted to sessionStorage
+          // Resume is managed server-side via career_plans.resume_json
+          const { resumeJson: _resumeJson, ...toStore } = next;
           sessionStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
         } catch {}
         return next;
