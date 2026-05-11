@@ -154,16 +154,19 @@ Thumbs.db
 
 # Claude Code local settings (machine-specific, not for sharing)
 .claude/
+.clauderc
 .mcp.json
 
-# Claude Code agent skill context (dev tooling only, not runtime)
-.agents/
-
-# Legacy agent YAML configs (superseded by TypeScript orchestration in agents/)
-.antigravity/
-
-# Scratch / one-off dev scripts
+# One-off dev scripts and temporary artifacts
 scratch/
+models_list.json
+
+# Agent test fixtures (contain personal data)
+agents/test-optimizer-full.mjs
+
+# Legacy / superseded directories (kept gitignored for safety)
+.agents/
+.antigravity/
 
 # Local development tools
 supabase/
