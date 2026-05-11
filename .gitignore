@@ -153,5 +153,10 @@ readmycareer-c547f96903fa.json
 Thumbs.db
 
 # Claude Code local settings (machine-specific, not for sharing)
-.claude/settings.local.json
+.claude/
 .mcp.json
+
+# Local development tools
+supabase/
+.playwright-mcp/
+
