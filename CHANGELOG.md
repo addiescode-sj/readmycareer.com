@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-05-11
+
+### Added
+
+- **Resume optimizer**: New **Optimize Resume** button in `/dashboard/[id]` activates when all career plan checklist items are completed. Calls a Gemini-powered `resume-generator` MCP skill to synthesize the resume, gap analysis, and completed todo evidence into an ATS-optimized output. ([`48dfd76`](../../commit/48dfd76))
+- **Optimized resume template**: Fixed section order — personal info, key highlights (≤5 ATS bullets), skills, education, awards/certs, cover letter (5-6 sentences). ([`48dfd76`](../../commit/48dfd76))
+- **Resume result modal**: Displays the generated resume with Copy as Markdown and Download `.md` actions. Button cycles through idle → generating → complete states; re-opens the modal if clicked again. ([`3df14e8`](../../commit/3df14e8))
+- **`optimized_resumes` Supabase table**: Persists one ATS-optimized resume per career plan (unique constraint on `career_plan_id`). Locale auto-detected from `Accept-Language` header (Korean / English). ([`48dfd76`](../../commit/48dfd76))
+
+### Fixed
+
+- **MCP skill subprocess path**: All four skill paths in `agents/lib/mcp-client.ts` corrected from `../../mcp-skills` to `../../../mcp-skills`. webpack hardcodes `import.meta.url` to the `dist/` path, so an extra level was needed to reach the monorepo root. ([`48dfd76`](../../commit/48dfd76))
+- **Resume personal info**: `/api/resume` was stripping `personal` from the SSE result before the client received it, causing 422 errors in the resume optimizer for any plan created after the fact. Now only `raw_text` is stripped. ([`3df14e8`](../../commit/3df14e8))
+- **Resume storage privacy**: `resumeJson` is no longer persisted to `sessionStorage`. It is kept in React in-memory state only and stored server-side via `career_plans.resume_json`. ([`3df14e8`](../../commit/3df14e8))
+- **Gap analyzer locale enforcement**: Added an explicit locale directive to the system instruction so the model outputs in the user's language regardless of the JD language. ([`9e9e56c`](../../commit/9e9e56c))
+- **Mobile double scrollbar**: Eliminated competing scroll contexts on small screens. ([`79d5141`](../../commit/79d5141))
+- **Roadmap mobile layout**: Reduced font sizes and padding for better readability on small viewports. ([`5fd88b0`](../../commit/5fd88b0))
+- **Plan selector overflow**: Constrained width and added text ellipsis to prevent layout breakage. ([`588167a`](../../commit/588167a))
+
+### Changed
+
+- **Gemini model**: Replaced deprecated `gemini-2.5-flash-preview-05-20` with `gemini-3.1-flash-lite-preview` in the `resume-generator` MCP skill. ([`48dfd76`](../../commit/48dfd76))
+
+### Refactored
+
+- **Logo component**: Extracted `Logo` as a shared component and unified logo rendering across pages. ([`6f6e98e`](../../commit/6f6e98e))
+- **Context panel**: Made the history context panel a collapsible accordion on mobile. ([`7084dff`](../../commit/7084dff))
+
+---
+
+## [0.3.0] - 2026-05-08
+
+### Added
+
+- **Synthetic Intelligence design system**: Implemented design tokens (colors, typography, spacing, elevation, glassmorphism) via shadcn/ui. All components now use semantic tokens instead of raw Tailwind color classes. ([`d06e205`](../../commit/d06e205))
+- **Landing page & layout shell**: Full landing page with hero, feature highlights, and CTA. Persistent layout shell with header, footer, and navigation. ([`adcd030`](../../commit/adcd030))
+- **Unified onboarding flow** (`InitializeWorkspace`): Replaced the two-step `ResumeUpload` + `GoalSetting` screens with a single workspace initialization view. ([`84a1bc0`](../../commit/84a1bc0))
+- **Dashboard sub-pages**: Career Profile, Roadmap Timeline, and Conversation History are now dedicated sub-pages under `/dashboard/[id]`. ([`5019066`](../../commit/5019066))
+- **Application status tracker**: Users can track job application status and add notes directly in the career profile section. ([`1902df1`](../../commit/1902df1))
+- **Roadmap velocity chart**: Visual chart showing weekly todo completion rate over time. ([`b756783`](../../commit/b756783))
+- **Plan selector**: Dropdown in the dashboard header for switching between saved career plans without leaving the page. ([`b756783`](../../commit/b756783))
+- **8-phase gap analyzer**: Rewrote the gap analyzer with a chain-of-thought 8-phase prompt for more precise skill-level matching, strength extraction, and portfolio gap detection. ([`e55d5b2`](../../commit/e55d5b2))
+- **i18n expansion**: Added translations for all new screens — velocity chart, career profile status/notes, history headers, and onboarding flow. Default locale changed to English. ([`1dc311d`](../../commit/1dc311d), [`829ad1e`](../../commit/829ad1e))
+
+### Fixed
+
+- **Locale detection**: Client now passes an explicit `locale` parameter to API routes to override server-side `Accept-Language` detection, which was unreliable in some deployment environments. ([`efdae43`](../../commit/efdae43))
+- **Gap analyzer output**: Improved language directive placement and deduplicated portfolio gaps that were appearing multiple times. ([`8265aaa`](../../commit/8265aaa))
+- **Conversation history layout**: Aligned column header heights in the dashboard history view. ([`659e9cd`](../../commit/659e9cd))
+- **Zod resume schema**: Added `.catch()` fallbacks to all resume parsing fields to prevent hard failures when the LLM omits optional fields. ([`87717b1`](../../commit/87717b1))
+
+### Refactored
+
+- **CompetencyRadar**: Extracted into a shared reusable component used across dashboard sub-pages. ([`9af9717`](../../commit/9af9717))
+- **PageHeader**: Extracted as a shared component for consistent dashboard page headers. ([`de463d2`](../../commit/de463d2))
+- **Design tokens**: Applied design system tokens to all existing components and updated root layout. ([`77ad520`](../../commit/77ad520))
+
+---
+
 ## [0.2.0] - 2026-04-29
 
 ### Added
