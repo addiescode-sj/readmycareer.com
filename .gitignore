@@ -156,6 +156,15 @@ Thumbs.db
 .claude/
 .mcp.json
 
+# Claude Code agent skill context (dev tooling only, not runtime)
+.agents/
+
+# Legacy agent YAML configs (superseded by TypeScript orchestration in agents/)
+.antigravity/
+
+# Scratch / one-off dev scripts
+scratch/
+
 # Local development tools
 supabase/
 .playwright-mcp/

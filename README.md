@@ -35,19 +35,23 @@ Because raw job descriptions often lack the full context needed to accurately as
 ## Architecture
 
 ```
-readmycareer.com/          (pnpm monorepo)
-├── app/                   Next.js 14 frontend + API routes
-├── agents/                Multi-agent orchestration layer (Google ADK)
-│   ├── gap-analyzer/      Phase-by-phase JD vs. resume comparison
-│   ├── planner/           Week-by-week career plan generator
-│   ├── chat-qna/          Context-aware career coach
-│   └── resume-optimizer/  ATS resume generation from completed plan
-└── mcp-skills/            MCP stdio subprocesses (connection-pooled)
-    ├── career-knowledge-base/   Pinecone RAG search over career/tech corpus
-    ├── career-plan-generator/   Structured plan JSON generation
-    ├── pdf-word-to-json/        Resume text extraction and normalization
-    └── resume-generator/        Gemini-powered ATS resume synthesis
+readmycareer.com/              (pnpm monorepo)
+├── app/                       Next.js 14 frontend + API routes
+├── agents/                    Multi-agent orchestration layer (Google ADK) ← runtime
+│   ├── gap-analyzer/          Phase-by-phase JD vs. resume comparison
+│   ├── planner/               Week-by-week career plan generator
+│   ├── chat-qna/              Context-aware career coach
+│   ├── resume-optimizer/      ATS resume generation from completed plan
+│   ├── lib/mcp-client.ts      Connection-pooled MCP stdio client
+│   └── orchestrator.ts        Public API surface (runCareerAnalysis, runChatQnA, runResumeOptimizer)
+└── mcp-skills/                MCP stdio subprocesses (spawned by agents/) ← runtime
+    ├── career-knowledge-base/ Pinecone RAG search over career/tech corpus
+    ├── career-plan-generator/ Structured plan JSON generation
+    ├── pdf-word-to-json/      Resume text extraction and normalization
+    └── resume-generator/      Gemini-powered ATS resume synthesis
 ```
+
+> `agents/` and `mcp-skills/` are the only runtime packages. All other root-level directories (`eval/`, `documents/`) are development tooling and documentation.
 
 ### Agent pipeline
 
