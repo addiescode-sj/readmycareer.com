@@ -8,6 +8,7 @@ export const SESSION_KEYS = {
   GAP_ANALYSIS: "gap_analysis",
   CAREER_PLAN: "career_plan",
   CHAT_HISTORY: "chat_history",
+  OPTIMIZED_RESUME: "optimized_resume",
 } as const;
 
 // ── Resume without personal info (used for gap analysis and career planning) ──
@@ -199,4 +200,43 @@ export interface JdSearchResult {
   title: string;
   score: number;
   text: string;
+}
+
+// ── ResumeOptimizerAgent I/O ──────────────────────────────────────────────────
+
+export interface OptimizedResumeInput {
+  resume_json: ResumeJson;               // full resume including personal info
+  gap_analysis: GapAnalysisOutput;
+  completed_todos: TodoItem[];           // only items where done === true
+  target_jd: {
+    title: string;
+    company: string | null;
+    jd_text: string;
+  };
+  locale: "ko" | "en";
+}
+
+export interface OptimizedResumeData {
+  personal: {
+    name: string | null;
+    job_title: string;
+    links: string[];
+    email: string | null;
+    phone: string | null;
+  };
+  highlights: string[];                  // max 5 ATS-friendly bullet points
+  skills: string[];                      // flat list of key technologies / competencies
+  education: EducationEntry[];
+  awards_and_certs: CertificationEntry[];
+  cover_letter: string;                  // 5-6 sentence motivation paragraph
+}
+
+export interface OptimizedResumeOutput {
+  resume_data: OptimizedResumeData;
+  markdown: string;
+  meta: {
+    generated_at: string;                // ISO 8601
+    language: "ko" | "en";
+    keywords_applied: string[];
+  };
 }

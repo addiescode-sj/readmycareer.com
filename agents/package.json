@@ -8,6 +8,7 @@
     "./gap-analyzer": "./dist/gap-analyzer/index.js",
     "./planner": "./dist/planner/index.js",
     "./chat-qna": "./dist/chat-qna/index.js",
+    "./resume-optimizer": "./dist/resume-optimizer/index.js",
     "./orchestrator": "./dist/orchestrator.js",
     "./types": "./dist/types.js"
   },

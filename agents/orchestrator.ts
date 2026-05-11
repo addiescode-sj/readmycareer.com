@@ -10,12 +10,15 @@ import {
 import { ChatQnAAgent } from "./chat-qna/index.js";
 import { getGapAnalyzerInstruction } from "./gap-analyzer/index.js";
 import { PLANNER_INSTRUCTION } from "./planner/index.js";
+import { runResumeOptimizer as _runResumeOptimizer } from "./resume-optimizer/index.js";
 import {
   SESSION_KEYS,
   ResumeJson,
   JdSearchResult,
   CareerPlanOutput,
   ChatQnAOutput,
+  OptimizedResumeInput,
+  OptimizedResumeOutput,
   omitPersonal,
 } from "./types.js";
 
@@ -662,4 +665,12 @@ export async function runChatQnA(
   });
 
   return (finalSession?.state?.[SESSION_KEYS.CHAT_HISTORY] ?? {}) as ChatQnAOutput;
+}
+
+// ── runResumeOptimizer ────────────────────────────────────────────────────────
+
+export async function runResumeOptimizer(
+  input: OptimizedResumeInput
+): Promise<OptimizedResumeOutput> {
+  return _runResumeOptimizer(input);
 }

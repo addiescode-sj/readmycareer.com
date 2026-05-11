@@ -10,23 +10,24 @@ import { resolve, dirname } from "path";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Skill dist paths (relative to the monorepo root)
+// Skill dist paths — resolved from agents/dist/lib/ (3 levels deep),
+// so ../../../ reaches the monorepo root where mcp-skills/ lives.
 const SKILL_PATHS: Record<string, string> = {
   "career-knowledge-base": resolve(
     __dirname,
-    "../../mcp-skills/career-knowledge-base/dist/index.js"
+    "../../../mcp-skills/career-knowledge-base/dist/index.js"
   ),
   "career-plan-generator": resolve(
     __dirname,
-    "../../mcp-skills/career-plan-generator/dist/index.js"
+    "../../../mcp-skills/career-plan-generator/dist/index.js"
   ),
   "pdf-word-to-json": resolve(
     __dirname,
-    "../../mcp-skills/pdf-word-to-json/dist/index.js"
+    "../../../mcp-skills/pdf-word-to-json/dist/index.js"
   ),
   "resume-generator": resolve(
     __dirname,
-    "../../mcp-skills/resume-generator/dist/index.js"
+    "../../../mcp-skills/resume-generator/dist/index.js"
   ),
 };
 
