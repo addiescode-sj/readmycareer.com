@@ -473,16 +473,117 @@
 
 | Priority | Count | Stories |
 |----------|-------|---------|
-| 🔴 Must  | 10    | US-001 (Google OAuth), US-002~003, 005, 007, 009~011, 013~014, 016 |
+| 🔴 Must  | 16    | US-001 (Google OAuth), US-002~003, 005, 007, 009~011, 013~014, 016, US-025~030 |
 | 🟡 Should| 10    | US-006, 008, 012, 015, 018, 021, 022, 023, 024 |
 | 🟢 Could | 2     | US-017, 019 |
 | ⚪ Won't | 1     | US-020 |
-| **Total**| **24**| |
+| **Total**| **30**| |
 
-**Recommended MVP Scope:** All "Must" + US-006 (Manual JD), US-012 (Toggle Visualization), US-015 (Chat History), US-021 (Copy as Markdown), US-023 (Application Status & Notes) — US-001 ~ US-016, US-021, US-023.
+**Recommended MVP Scope:** All "Must" + US-006 (Manual JD), US-012 (Toggle Visualization), US-015 (Chat History), US-021 (Copy as Markdown), US-023 (Application Status & Notes) — US-001 ~ US-016, US-021, US-023, US-025~030.
 
 **Next Steps:**
 - [ ] Story point estimation with the dev team (Planning Poker) — Focus on US-016 RAG pipeline effort.
 - [ ] Register US-020 (Parallel Goals) in the next sprint backlog.
 - [ ] Refine US-007 Gap Analysis JSON schema with PO/Dev (Front-end rendering dependency).
 - [x] DB architecture decided: Supabase PostgreSQL is the primary relational DB; Pinecone remains the primary RAG vector store. `jd_documents` mirrored in Supabase pgvector (768-dim, gemini-embedding-001) as supplementary storage.
+
+---
+
+## Epic 8: Resume Optimizer
+
+> Converts the completed career plan into a tangible, job-ready artifact — an ATS-optimized resume synthesized by Gemini multimodal LLM.
+
+### Epic
+**US-025: Resume Optimizer** — Generate a job-ready, ATS-optimized resume when all career plan checklist items are completed.
+
+---
+
+### User Stories
+
+#### US-025: Optimize Resume Button
+**As a** user who has completed all checklist items in a career plan,  
+**I want to** click "Optimize Resume" to generate a tailored resume,  
+**So that** I can immediately apply to the target role with a polished, JD-matched document.
+
+**Acceptance Criteria:**
+- [ ] "Optimize Resume" button is visible in the saved plan view (`/dashboard/[id]`)
+- [ ] Button is **disabled** when `completedTodosCount < totalTodosCount` and no resume has been previously generated
+- [ ] Hovering the disabled button shows tooltip: "Complete all checklist items to generate your optimized resume"
+- [ ] Button becomes **active** (purple gradient) when all todos are marked done
+- [ ] Clicking the active button calls `POST /api/resume-optimizer`
+- [ ] Loading state shows "Generating..." text while request is in flight
+- [ ] Once generated, button permanently shows "✓ Resume Generated" across page reloads (on mount, client queries `optimized_resumes` by `career_plan_id` and sets completed state if a row exists)
+- [ ] Clicking "✓ Resume Generated" re-opens the result modal with the cached data; no new API call is made
+- [ ] "✓ Resume Generated" button is always clickable regardless of current todo completion status
+
+#### US-026: Optimized Resume Content
+**As a** user generating an optimized resume,  
+**I want** the resume to follow a fixed ATS-friendly template,  
+**So that** my resume passes automated screening and clearly communicates my fit.
+
+**Acceptance Criteria:**
+- [ ] Resume includes all 6 sections in order: personal info, highlights, skills, education, awards/certs, cover letter
+- [ ] Highlights section contains 3–5 bullet points starting with action verbs
+- [ ] Cover letter is 5–6 sentences explaining JD fit
+- [ ] No tables in the output — bullet points only
+- [ ] JD keywords (from gap analysis) are naturally embedded in descriptions
+- [ ] Completed career plan activities are referenced in the cover letter
+
+#### US-027: Resume Locale Awareness
+**As a** user with a preferred language,  
+**I want** the resume to be generated in my browser language,  
+**So that** I receive a Korean or English resume without manual selection.
+
+**Acceptance Criteria:**
+- [ ] `Accept-Language: ko*` → Korean resume output
+- [ ] Other languages → English resume output
+- [ ] Language applied consistently across all sections (highlights, cover letter, section headings)
+
+#### US-028: Resume Result Modal
+**As a** user who has generated an optimized resume,  
+**I want** to view, copy, and download it from a modal,  
+**So that** I can use the resume in my job application immediately.
+
+**Acceptance Criteria:**
+- [ ] Modal opens after successful generation (or when re-clicking "✓ Resume Generated")
+- [ ] Modal renders as a full-screen overlay via React Portal into `document.body` (not a centered card)
+- [ ] All resume sections are rendered in correct order
+- [ ] Applied JD keyword chips are shown in the modal header
+- [ ] "Copy Markdown" copies the full resume to clipboard
+- [ ] "Download .md" triggers a browser file download of the raw markdown
+- [ ] "PDF로 저장" opens a print-ready HTML page and triggers the browser print/save-as-PDF dialog
+- [ ] PDF output uses `@page { margin: 0 }` to suppress browser-generated print headers (date, title) and footers (URL, page number)
+- [ ] All external links in the PDF (LinkedIn, GitHub, etc.) are normalized to `https://` before rendering
+- [ ] Modal closes via the × button
+
+#### US-029: One Resume Per Plan
+**As a** user,  
+**I want** re-clicking "Optimize Resume" to return the existing resume,  
+**So that** I don't accidentally overwrite a resume I'm happy with.
+
+**Acceptance Criteria:**
+- [ ] Calling the API again for the same `career_plan_id` returns the cached result
+- [ ] No duplicate rows in `optimized_resumes` for the same career plan
+- [ ] UNIQUE constraint on `optimized_resumes.career_plan_id` enforced at DB level
+- [ ] On page load, the client queries Supabase for an existing `optimized_resumes` row; if found, the button state is pre-set to "completed" without requiring a new generation
+
+---
+
+#### US-030: Skeleton Loading State for Optimize Button
+**As a** user visiting a plan detail page,
+**I want** the optimize button area to show a loading placeholder while the app checks if a resume already exists,
+**So that** I don't see the button flash between "Optimize Resume" and "✓ Resume Generated" states on page load.
+
+**Acceptance Criteria:**
+- [ ] On page mount, before the Supabase `optimized_resumes` query resolves, the button area renders an `animate-pulse` skeleton matching the button's height and approximate width
+- [ ] Once the query resolves (resume found or not), the skeleton is replaced by the correct button state in a single render with no visible flash
+- [ ] The skeleton placeholder has no click handlers (not interactive)
+- [ ] The skeleton matches the button's visual dimensions (`h-9 w-36`, `rounded-xl`)
+
+---
+
+| Priority | Points | Stories |
+|----------|--------|---------|
+| 🔴 Must  | 10     | US-025, US-026, US-027, US-028, US-029, US-030 |
+
+**Story Point Breakdown:** US-025 (2), US-026 (3), US-027 (1), US-028 (2), US-029 (1), US-030 (1) → Total: 10 points

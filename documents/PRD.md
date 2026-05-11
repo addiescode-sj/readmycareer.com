@@ -116,3 +116,37 @@ Career Plan Limit: Maximum 3 active/completed career plans per user account. Enf
 Chat History Retention: 7 days per career plan. Enforced via a daily pg_cron cleanup job and a `recent_chat_messages` VIEW that automatically filters to the last 7 days.
 
 Row Level Security: All user data tables are protected by Supabase RLS. Users can only access their own data.
+
+### 5. Resume Optimizer
+
+**Trigger:** The "Optimize Resume" button is enabled only when all todo items across the career plan are marked as completed (`completedTodosCount === totalTodosCount && totalTodosCount > 0`). When disabled, a hover tooltip reads "Complete all checklist items to generate your optimized resume." (i18n-aware). The button is shown exclusively in the saved plan detail view (`/dashboard/[id]`) — not during the initial session flow.
+
+**Persistent state:** On page load, the client queries `optimized_resumes` by `career_plan_id`. If a row exists, the button immediately renders as "✓ Resume Generated" (regardless of todo completion status) and clicking it re-opens the result modal without triggering a new API call. While the initial Supabase query is in-flight, the button slot is replaced by an animated skeleton placeholder (`animate-pulse`, matching the button's height and width) to prevent UI flicker between "Optimize Resume" and "✓ Resume Generated" states.
+
+**Generation flow:**
+- User clicks "Optimize Resume" → `POST /api/resume-optimizer { career_plan_id }`
+- API checks for an existing `optimized_resumes` row (idempotent — returns cached result)
+- API validates all weekly tasks are completed (server-side guard)
+- API fetches: `career_plans`, `gap_analyses.summary_json`, `resumes.resume_json` (with personal info), completed `weekly_tasks.action_items`
+- Locale detected from `Accept-Language` header → "ko" or "en"
+- `runResumeOptimizer()` calls `ResumeOptimizerAgent` → `callMcpTool("resume-generator", "generate_resume", …)`
+- `resume-generator` MCP invokes Gemini (`gemini-2.5-flash-preview-05-20`) to synthesize the resume
+- Result persisted to `optimized_resumes` table; returned as JSON
+
+**Resume template (fixed order):**
+1. Personal info: name, job title, website links, email, phone
+2. Key highlights: max 5 ATS-friendly bullets synthesized from experience/projects (prioritizing JD-matched achievements and completed todo activities)
+3. Key skills: flat deduplicated list
+4. Education
+5. Awards & certifications
+6. Cover letter: 5-6 sentence motivation paragraph explaining JD fit (references gap summary + completed activities)
+
+**Content constraints (ATS-friendly):**
+- No tables — bullet points only
+- Strong action verbs at the start of each highlight
+- JD keywords woven naturally into descriptions
+- Markdown formatted for clean plain-text rendering
+
+**DB constraint:** `optimized_resumes.career_plan_id` is UNIQUE — at most one optimized resume per career plan. Enforced at database level.
+
+**Result display:** Full-screen overlay modal rendered via React Portal directly into `document.body` (bypasses parent CSS `filter` constraints that would otherwise limit `position: fixed` to a transformed ancestor). Modal covers the entire viewport with a glassmorphism background (95% white opacity, 20px backdrop blur). Contains all resume sections, applied JD keyword chips, and three export actions: "Copy Markdown" (copies raw markdown to clipboard), "Download .md" (browser file download), and "PDF로 저장" (opens a print-ready HTML page and triggers the browser print/save-as-PDF dialog). PDF output uses `@page { margin: 0 }` CSS to suppress browser-generated print headers (date, title) and footers (URL, page number); all external links are normalized to `https://` before rendering. Modal closes via the × button.
