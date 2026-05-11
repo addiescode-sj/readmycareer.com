@@ -53,6 +53,19 @@ readmycareer.com/              (pnpm monorepo)
 
 > `agents/` and `mcp-skills/` are the only runtime packages. All other root-level directories (`eval/`, `documents/`) are development tooling and documentation.
 
+### Gemini CLI workspace skills
+
+`.gemini/skills/` contains workspace skills for [Gemini CLI](https://geminicli.com/docs/cli/skills/) — one skill per agent/subsystem. Each skill packages developer context (I/O specs, constraints, architecture notes) that Gemini activates when you ask it to work on that part of the codebase.
+
+```
+.gemini/skills/
+├── gap-analyzer/      SKILL.md — gap analysis agent context
+├── planner/           SKILL.md — career plan generator context
+├── chat-qna/          SKILL.md — AI career coach context
+├── resume-optimizer/  SKILL.md — ATS resume generation context
+└── mcp-skills/        SKILL.md — MCP stdio subprocess development context
+```
+
 ### Agent pipeline
 
 ```
