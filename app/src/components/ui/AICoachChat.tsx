@@ -151,9 +151,15 @@ export function AICoachChat({
           const payload = line.slice(6).trim();
           if (payload === "[DONE]") break;
           try {
-            const parsed = JSON.parse(payload) as { text?: string };
+            const parsed = JSON.parse(payload) as { text?: string; error?: string };
             if (parsed.text) {
               assistantText += parsed.text;
+              setMessages((prev) => [
+                ...prev.slice(0, -1),
+                { role: "assistant", content: assistantText },
+              ]);
+            } else if (parsed.error) {
+              assistantText = parsed.error;
               setMessages((prev) => [
                 ...prev.slice(0, -1),
                 { role: "assistant", content: assistantText },
