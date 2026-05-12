@@ -53,14 +53,16 @@ PRICE_OUTPUT_PER_1M = 0.30
 
 THRESHOLDS: dict[str, float] = {
     "schema_compliance_rate": 0.95,
-    "json_parse_error_rate": 0.05,   # must be below this value to PASS
+    "json_parse_error_rate": 0.05,             # must be below this value to PASS
     "gap_faithfulness": 0.70,
     "plan_completeness_rate": 0.90,
     "date_consistency_rate": 1.00,
-    "p95_latency_s": 30.0,           # must be below this value to PASS
-    "avg_cost_usd": 0.01,            # must be below this value to PASS
+    "p95_latency_s": 30.0,                     # must be below this value to PASS
+    "avg_cost_usd": 0.01,                      # must be below this value to PASS
     "match_score_in_range_rate": 0.80,
     "category_diversity_rate": 1.00,
+    "project_portfolio_strength_rate": 0.80,   # fixtures with projects must have ≥1 portfolio strength
+    "project_plan_integration_rate": 0.70,     # fixtures with projects must reference a project in ≥1 todo
 }
 
 # ── JSON schema definition ────────────────────────────────────────────────────
@@ -202,6 +204,39 @@ def check_date_consistency(data: dict) -> bool:
         return False
 
 
+def check_portfolio_strengths(data: dict) -> bool:
+    """
+    Checks that gap_analysis.strengths contains at least one portfolio-category item.
+    Only meaningful when the resume has projects (checked by caller via fixture).
+    """
+    strengths = data.get("gap_analysis", {}).get("strengths", [])
+    return any(s.get("category") == "portfolio" for s in strengths)
+
+
+def check_project_plan_integration(data: dict, fixture: dict) -> bool:
+    """
+    Checks that at least one todo title or description references an existing project name
+    from the fixture's resume. Case-insensitive substring match.
+    """
+    project_names = [
+        p.get("name", "").lower()
+        for p in fixture.get("request", {}).get("resumeJson", {}).get("projects", [])
+        if p.get("name")
+    ]
+    if not project_names:
+        return True  # no projects in fixture — skip check
+
+    weeks = data.get("weeks", [])
+    for week in weeks:
+        for todo in week.get("todos", []):
+            text = (
+                (todo.get("title") or "") + " " + (todo.get("description") or "")
+            ).lower()
+            if any(name in text for name in project_names):
+                return True
+    return False
+
+
 # ── Cost estimation ───────────────────────────────────────────────────────────
 
 
@@ -310,6 +345,8 @@ def run_fixture(fixture: dict, client: httpx.Client, endpoint: str) -> dict:
         "date_consistent": False,
         "match_score_in_range": False,
         "category_diversity_ok": False,
+        "project_portfolio_strength": False,
+        "project_plan_integration": False,
         "overall_match_score": None,
         "prompt_tokens": 0,
         "completion_tokens": 0,
@@ -384,6 +421,16 @@ def run_fixture(fixture: dict, client: httpx.Client, endpoint: str) -> dict:
         and (not expected_cats or expected_cats.issubset(all_categories))
     )
 
+    # Project integration checks (only when resume has projects)
+    resume_projects = fixture.get("request", {}).get("resumeJson", {}).get("projects", [])
+    if resume_projects:
+        result["project_portfolio_strength"] = check_portfolio_strengths(data)
+        result["project_plan_integration"] = check_project_plan_integration(data, fixture)
+    else:
+        # No projects in resume — treat as passing (not applicable)
+        result["project_portfolio_strength"] = True
+        result["project_plan_integration"] = True
+
     return result
 
 
@@ -438,6 +485,16 @@ def compute_metrics(results: list[dict]) -> dict:
         ),
         "category_diversity_rate": (
             sum(1 for r in successful if r.get("category_diversity_ok", False)) / len(successful)
+            if successful
+            else 0.0
+        ),
+        "project_portfolio_strength_rate": (
+            sum(1 for r in successful if r.get("project_portfolio_strength", False)) / len(successful)
+            if successful
+            else 0.0
+        ),
+        "project_plan_integration_rate": (
+            sum(1 for r in successful if r.get("project_plan_integration", False)) / len(successful)
             if successful
             else 0.0
         ),
@@ -529,6 +586,18 @@ def print_summary(metrics: dict, all_pass: bool) -> None:
             "= 100%",
             _pass_fail(metrics["category_diversity_rate"] >= THRESHOLDS["category_diversity_rate"]),
         ],
+        [
+            "Project Portfolio Strength",
+            f"{metrics['project_portfolio_strength_rate']:.2%}",
+            f">= {THRESHOLDS['project_portfolio_strength_rate']:.0%}",
+            _pass_fail(metrics["project_portfolio_strength_rate"] >= THRESHOLDS["project_portfolio_strength_rate"]),
+        ],
+        [
+            "Project Plan Integration",
+            f"{metrics['project_plan_integration_rate']:.2%}",
+            f">= {THRESHOLDS['project_plan_integration_rate']:.0%}",
+            _pass_fail(metrics["project_plan_integration_rate"] >= THRESHOLDS["project_plan_integration_rate"]),
+        ],
     ]
 
     print(
@@ -579,6 +648,8 @@ def all_thresholds_met(metrics: dict) -> bool:
         metrics["avg_cost_usd"] <= THRESHOLDS["avg_cost_usd"],
         metrics["match_score_in_range_rate"] >= THRESHOLDS["match_score_in_range_rate"],
         metrics["category_diversity_rate"] >= THRESHOLDS["category_diversity_rate"],
+        metrics["project_portfolio_strength_rate"] >= THRESHOLDS["project_portfolio_strength_rate"],
+        metrics["project_plan_integration_rate"] >= THRESHOLDS["project_plan_integration_rate"],
     ]
     # gap_faithfulness: skip check if NaN (judge was skipped)
     if not math.isnan(metrics["gap_faithfulness"]):
