@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const { career_plan_id } = body;
   const locale = detectLocale(req);
 
-  // ── Idempotency: return existing result if present ────────────────────────
+  // ── Idempotency: return existing result if present and has projects data ──
   const { data: existing } = await supabase
     .from("optimized_resumes")
     .select("id, resume_data, markdown, meta, locale, created_at")
@@ -38,7 +38,11 @@ export async function POST(req: NextRequest) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (existing) {
+  const existingHasProjects =
+    existing &&
+    Array.isArray((existing.resume_data as Record<string, unknown>)?.projects);
+
+  if (existingHasProjects) {
     return NextResponse.json(existing);
   }
 
@@ -123,34 +127,26 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── Persist to Supabase ───────────────────────────────────────────────────
-  const { data: inserted, error: insertError } = await supabase
+  // ── Persist to Supabase (upsert to handle re-generation of legacy rows) ──
+  const upsertPayload = {
+    career_plan_id,
+    user_id: user.id,
+    locale,
+    resume_data: optimizerResult.resume_data,
+    markdown: optimizerResult.markdown,
+    meta: optimizerResult.meta,
+  };
+
+  const { data: upserted, error: upsertError } = await supabase
     .from("optimized_resumes")
-    .insert({
-      career_plan_id,
-      user_id: user.id,
-      locale,
-      resume_data: optimizerResult.resume_data,
-      markdown: optimizerResult.markdown,
-      meta: optimizerResult.meta,
-    })
+    .upsert(upsertPayload, { onConflict: "career_plan_id" })
     .select("id, resume_data, markdown, meta, locale, created_at")
     .single();
 
-  if (insertError) {
-    // Unique constraint violation means a concurrent request already inserted
-    if (insertError.code === "23505") {
-      const { data: concurrent } = await supabase
-        .from("optimized_resumes")
-        .select("id, resume_data, markdown, meta, locale, created_at")
-        .eq("career_plan_id", career_plan_id)
-        .eq("user_id", user.id)
-        .single();
-      return NextResponse.json(concurrent);
-    }
-    console.error("[/api/resume-optimizer] DB insert failed:", insertError);
+  if (upsertError) {
+    console.error("[/api/resume-optimizer] DB upsert failed:", upsertError);
     return NextResponse.json({ error: "Failed to save resume" }, { status: 500 });
   }
 
-  return NextResponse.json(inserted, { status: 201 });
+  return NextResponse.json(upserted, { status: 201 });
 }
