@@ -16,12 +16,14 @@ const QUALITY = {
     "personal",
     "highlights",
     "skills",
+    "experience",
     "education",
     "awards_and_certs",
     "cover_letter",
   ] as const,
   MIN_KEYWORDS_APPLIED: 3,
   MIN_SKILLS: 3,
+  MIN_EXPERIENCE_ENTRIES: 1,
 };
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
@@ -87,8 +89,8 @@ const FIXTURE: OptimizedResumeInput = {
       { id: "s2", category: "experience", item: "Microservices", evidence: "Led migration at TechCorp" },
     ],
     gaps: [
-      { id: "g1", category: "skill", item: "Terraform", current_level: null, required_level: "Proficient", priority: "high", rationale: "IaC experience required for Staff level" },
-      { id: "g2", category: "certification", item: "CKA (Certified Kubernetes Administrator)", current_level: null, required_level: "Certified", priority: "medium", rationale: "Kubernetes depth expected at staff level" },
+      { id: "g1", category: "skill", item: "Terraform", current_level: null, required_level: "Proficient", priority: "high", requirement_type: "required", rationale: "IaC experience required for Staff level" },
+      { id: "g2", category: "certification", item: "CKA (Certified Kubernetes Administrator)", current_level: null, required_level: "Certified", priority: "medium", requirement_type: "preferred", rationale: "Kubernetes depth expected at staff level" },
     ],
     priority_order: ["g1", "g2"],
     overall_match_score: 72,
@@ -122,7 +124,63 @@ function countSentences(text: string): number {
   return text.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
 }
 
-function validateOutput(output: OptimizedResumeOutput): { passed: boolean; errors: string[] } {
+// Checks that output dates exactly match input dates for a given section.
+// Returns a list of mismatch descriptions (empty = all match).
+function checkDateFidelity(input: OptimizedResumeInput, output: OptimizedResumeOutput): string[] {
+  const mismatches: string[] = [];
+
+  // Experience period fidelity
+  for (let i = 0; i < input.resume_json.experience.length; i++) {
+    const src = input.resume_json.experience[i];
+    const out = output.resume_data.experience?.[i];
+    if (!out) {
+      mismatches.push(`experience[${i}] (${src.company}) missing from output`);
+      continue;
+    }
+    if (out.period.start !== src.period.start) {
+      mismatches.push(`experience[${i}] period.start: expected "${src.period.start}", got "${out.period.start}"`);
+    }
+    if (out.period.end !== src.period.end) {
+      mismatches.push(`experience[${i}] period.end: expected "${src.period.end}", got "${out.period.end}"`);
+    }
+  }
+
+  // Education period fidelity
+  for (let i = 0; i < input.resume_json.education.length; i++) {
+    const src = input.resume_json.education[i];
+    const out = output.resume_data.education?.[i];
+    if (!out) {
+      mismatches.push(`education[${i}] (${src.institution}) missing from output`);
+      continue;
+    }
+    if (out.period.start !== src.period.start) {
+      mismatches.push(`education[${i}] period.start: expected "${src.period.start}", got "${out.period.start}"`);
+    }
+    if (out.period.end !== src.period.end) {
+      mismatches.push(`education[${i}] period.end: expected "${src.period.end}", got "${out.period.end}"`);
+    }
+  }
+
+  // Certification date fidelity
+  for (let i = 0; i < input.resume_json.certifications.length; i++) {
+    const src = input.resume_json.certifications[i];
+    const out = output.resume_data.awards_and_certs?.[i];
+    if (!out) {
+      mismatches.push(`awards_and_certs[${i}] (${src.name}) missing from output`);
+      continue;
+    }
+    if (out.date !== src.date) {
+      mismatches.push(`awards_and_certs[${i}] date: expected "${src.date}", got "${out.date}"`);
+    }
+  }
+
+  return mismatches;
+}
+
+function validateOutput(
+  output: OptimizedResumeOutput,
+  input: OptimizedResumeInput
+): { passed: boolean; errors: string[] } {
   const errors: string[] = [];
   const { resume_data, markdown, meta } = output;
 
@@ -131,6 +189,12 @@ function validateOutput(output: OptimizedResumeOutput): { passed: boolean; error
     if (!(section in resume_data)) {
       errors.push(`Missing required section: ${section}`);
     }
+  }
+
+  // Experience entry count
+  const expCount = resume_data.experience?.length ?? 0;
+  if (input.resume_json.experience.length > 0 && expCount < QUALITY.MIN_EXPERIENCE_ENTRIES) {
+    errors.push(`experience entries missing: got ${expCount}, input has ${input.resume_json.experience.length}`);
   }
 
   // Highlights
@@ -163,6 +227,12 @@ function validateOutput(output: OptimizedResumeOutput): { passed: boolean; error
     errors.push(`keywords_applied count too low: ${kwCount} (min ${QUALITY.MIN_KEYWORDS_APPLIED})`);
   }
 
+  // Date fidelity: all input dates must appear verbatim in output
+  const dateMismatches = checkDateFidelity(input, output);
+  for (const m of dateMismatches) {
+    errors.push(`[DATE_HALLUCINATION] ${m}`);
+  }
+
   // Markdown must include key headers
   if (!markdown.includes("##")) {
     errors.push("markdown missing section headers");
@@ -187,13 +257,14 @@ async function runEval() {
     process.exit(1);
   }
 
-  const { passed, errors } = validateOutput(output);
+  const { passed, errors } = validateOutput(output, FIXTURE);
 
   console.log("[EVAL] Output preview:");
   console.log("  personal.name:", output.resume_data.personal?.name);
   console.log("  job_title:", output.resume_data.personal?.job_title);
   console.log("  highlights:", output.resume_data.highlights?.length, "items");
   console.log("  skills:", output.resume_data.skills?.length, "items");
+  console.log("  experience:", output.resume_data.experience?.length, "entries");
   console.log("  keywords_applied:", output.meta?.keywords_applied);
   console.log("  cover_letter sentences:", output.resume_data.cover_letter?.split(/[.!?]+/).filter(s => s.trim()).length);
   console.log("\n--- MARKDOWN PREVIEW (first 500 chars) ---");

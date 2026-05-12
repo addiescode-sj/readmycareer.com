@@ -18,27 +18,37 @@ const MAX_RETRIES = 2;
 
 // ── Keyword extractor ─────────────────────────────────────────────────────────
 // Derives a deduplicated keyword list from gap analysis items + JD text keywords.
-// Falls back to gap_analysis.gaps[].item values when no target_jd keywords are available.
+// Required gaps come first (they are disqualifying), then preferred, then strengths.
+// Falls back to priority-based ordering for legacy data without requirement_type.
 
-function extractKeywords(input: OptimizedResumeInput): string[] {
-  const fromGaps = input.gap_analysis.gaps
-    .filter(g => g.priority === "high" || g.priority === "medium")
-    .map(g => g.item);
+function extractKeywords(input: OptimizedResumeInput): { required: string[]; preferred: string[] } {
+  const isRequired = (g: typeof input.gap_analysis.gaps[number]) =>
+    g.requirement_type === "required" || (!g.requirement_type && g.priority === "high");
 
+  const requiredGaps = input.gap_analysis.gaps.filter(isRequired).map(g => g.item);
+  const preferredGaps = input.gap_analysis.gaps.filter(g => !isRequired(g)).map(g => g.item);
   const fromStrengths = input.gap_analysis.strengths.map(s => s.item);
 
-  // Deduplicate while preserving gap items first (they are most relevant for optimization)
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const kw of [...fromGaps, ...fromStrengths]) {
-    const normalized = kw.trim().toLowerCase();
-    if (!seen.has(normalized)) {
-      seen.add(normalized);
-      result.push(kw.trim());
+  const dedup = (items: string[], seen: Set<string>): string[] => {
+    const result: string[] = [];
+    for (const kw of items) {
+      const norm = kw.trim().toLowerCase();
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        result.push(kw.trim());
+      }
     }
-  }
+    return result;
+  };
 
-  return result.slice(0, 20); // cap to avoid overly long prompts
+  const seen = new Set<string>();
+  const required = dedup(requiredGaps, seen);
+  const preferred = dedup([...preferredGaps, ...fromStrengths], seen);
+
+  return {
+    required: required.slice(0, 12),
+    preferred: preferred.slice(0, 8),
+  };
 }
 
 // ── Activity summarizer ───────────────────────────────────────────────────────
@@ -55,7 +65,7 @@ function summarizeCompletedTodos(todos: OptimizedResumeInput["completed_todos"])
 export async function runResumeOptimizer(
   input: OptimizedResumeInput
 ): Promise<OptimizedResumeOutput> {
-  const keywords = extractKeywords(input);
+  const { required: requiredKeywords, preferred: preferredKeywords } = extractKeywords(input);
   const completedActivities = summarizeCompletedTodos(input.completed_todos);
 
   const gapSummary = input.gap_analysis.summary;
@@ -65,7 +75,8 @@ export async function runResumeOptimizer(
     target_jd: {
       title: input.target_jd.title,
       company: input.target_jd.company,
-      keywords,
+      keywords: requiredKeywords,           // passed as primary emphasis keywords
+      preferred_keywords: preferredKeywords, // secondary emphasis keywords
     },
     cover_letter_context: {
       gap_summary: gapSummary,

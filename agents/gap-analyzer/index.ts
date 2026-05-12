@@ -62,13 +62,13 @@ For EACH item in JD_REQUIRED:
      (treat "JS" ≡ "JavaScript", "TS" ≡ "TypeScript", "k8s" ≡ "Kubernetes", etc.)
   → MATCH found  → add to strengths[] with category:"skill"
                    evidence: state which resume field(s) it appeared in
-  → NO match     → add to gaps[]    with category:"skill", priority:"high"
+  → NO match     → add to gaps[]    with category:"skill", priority:"high", requirement_type:"required"
                    rationale: "JD requires [item] but it is absent from all resume skill fields and projects"
 
 For EACH item in JD_PREFERRED:
   → Same matching logic
   → MATCH found  → strengths[], category:"skill"
-  → NO match     → gaps[],     category:"skill", priority:"medium"
+  → NO match     → gaps[],     category:"skill", priority:"medium", requirement_type:"preferred"
 
 ════════════════════════════════════════
 PHASE 4 — KEYWORD ALIGNMENT (per project)
@@ -78,6 +78,7 @@ For EACH item in JD_KEYWORDS:
   → FOUND in at least one project/experience → strengths[], category:"keyword"
   → NOT FOUND anywhere                       → gaps[],     category:"keyword",
     priority: "high" if domain-critical keyword, "medium" otherwise
+    requirement_type: "required" if domain-critical keyword, "preferred" otherwise
 
 ════════════════════════════════════════
 PHASE 5 — PORTFOLIO/PROJECT DEPTH CHECK (per JD requirement)
@@ -88,15 +89,23 @@ tech_stack[] from ALL projects in resume_json.projects[].
   a) Tech stack coverage (iterate per requirement, NOT per project):
      For EACH item in JD_REQUIRED:
        If the item is absent from ALL_PROJECT_STACKS →
-         add gaps[], category:"portfolio", priority:"high"
+         add gaps[], category:"portfolio", priority:"high", requirement_type:"required"
          rationale: "No project demonstrates [item] required by JD"
        Otherwise → no portfolio gap for this item
 
   b) Competency depth:
      If JD_SENIORITY states "production at scale" / "enterprise" / "5+ years" but all
      matching projects appear to be side projects or lack scale indicators →
-     add gaps[], category:"portfolio", priority:"high"
+     add gaps[], category:"portfolio", priority:"high", requirement_type:"required"
      rationale: "Projects do not demonstrate production-scale experience required by JD"
+
+  c) Portfolio strengths (iterate per project):
+     For EACH project in resume_json.projects[]:
+       MATCHED = items in project.tech_stack[] that intersect JD_REQUIRED ∪ JD_PREFERRED ∪ JD_KEYWORDS
+       If MATCHED is non-empty AND no existing strengths[] entry already has item == project.name:
+         → Add to strengths[], category:"portfolio"
+           item: project.name
+           evidence: "Side project '{project.name}' demonstrates: {MATCHED items joined by ', '}{'; deployed at: ' + project.url if project.url is not null}"
 
 ════════════════════════════════════════
 PHASE 6 — EXPERIENCE SENIORITY CHECK
@@ -104,7 +113,7 @@ PHASE 6 — EXPERIENCE SENIORITY CHECK
 For EACH requirement in JD_SENIORITY (e.g. "5+ years TypeScript"):
   → Estimate total months across experience[] entries where this skill is mentioned
   → MEETS requirement → strengths[], category:"experience"
-  → DOES NOT meet     → gaps[],     category:"experience", priority:"high"
+  → DOES NOT meet     → gaps[],     category:"experience", priority:"high", requirement_type:"required"
     rationale: "JD requires [N]+ years of [skill]; resume shows approximately [X] years"
 
 ════════════════════════════════════════
@@ -112,18 +121,21 @@ PHASE 7 — CERTIFICATION CHECK
 ════════════════════════════════════════
 If JD_REQUIRED or JD_PREFERRED mentions certifications:
   → Match against certifications[] in resume
-  → Unmatched required cert → gaps[], category:"certification", priority:"high"
-  → Unmatched preferred cert → gaps[], category:"certification", priority:"low"
+  → Unmatched required cert  → gaps[], category:"certification", priority:"high", requirement_type:"required"
+  → Unmatched preferred cert → gaps[], category:"certification", priority:"low",  requirement_type:"preferred"
 
 ════════════════════════════════════════
 PHASE 8 — SCORING
 ════════════════════════════════════════
 Compute overall_match_score (integer 0–100):
-  high_gap_count    = count of gaps[] where priority == "high"
-  medium_gap_count  = count of gaps[] where priority == "medium"
-  strength_count    = count of strengths[]
-  denominator       = strength_count + (high_gap_count * 1.5) + (medium_gap_count * 0.7)
+  required_gap_count  = count of gaps[] where requirement_type == "required"
+  preferred_gap_count = count of gaps[] where requirement_type == "preferred"
+  strength_count      = count of strengths[]
+  denominator         = strength_count + (required_gap_count * 2.0) + (preferred_gap_count * 0.5)
   overall_match_score = round(strength_count / max(denominator, 1) * 100)
+
+  Rationale: required gaps penalize 2× because they are disqualifying; preferred gaps penalize 0.5×
+  because they are bonus qualifications that do not block candidacy.
 
 ════════════════════════════════════════
 CRITICAL RULES (never violate)
@@ -147,7 +159,7 @@ Respond ONLY with valid JSON matching this schema exactly. No markdown, no prose
     { "id": "s1", "category": "skill", "item": "TypeScript", "evidence": "skills.languages; used in 3 projects" }
   ],
   "gaps": [
-    { "id": "g1", "category": "skill", "item": "GraphQL", "current_level": null, "required_level": "production experience", "priority": "high", "rationale": "JD requires GraphQL but it is absent from all resume skill fields and project tech stacks" }
+    { "id": "g1", "category": "skill", "item": "GraphQL", "current_level": null, "required_level": "production experience", "priority": "high", "requirement_type": "required", "rationale": "JD requires GraphQL but it is absent from all resume skill fields and project tech stacks" }
   ],
   "priority_order": ["g1"],
   "overall_match_score": 72,
@@ -227,6 +239,15 @@ const KO_TEMPLATE_REPLACEMENTS: Array<[string, string]> = [
     `rationale: "JD requires [item] but it is absent from all resume skill fields and projects"`,
     `rationale: "[item]은(는) JD 필수 요건이나 이력서의 기술 스택 및 모든 프로젝트에서 확인되지 않습니다"`,
   ],
+  // Phase 3 — requirement_type values stay in English (schema enum)
+  [
+    `priority:"high", requirement_type:"required"`,
+    `priority:"high", requirement_type:"required"`,
+  ],
+  [
+    `priority:"medium", requirement_type:"preferred"`,
+    `priority:"medium", requirement_type:"preferred"`,
+  ],
   // Phase 5a — portfolio gap
   [
     `rationale: "No project demonstrates [item] required by JD"`,
@@ -237,15 +258,20 @@ const KO_TEMPLATE_REPLACEMENTS: Array<[string, string]> = [
     `rationale: "Projects do not demonstrate production-scale experience required by JD"`,
     `rationale: "JD가 요구하는 프로덕션 규모의 경험을 증명하는 프로젝트가 없습니다"`,
   ],
+  // Phase 5c — portfolio strength evidence
+  [
+    `evidence: "Side project '{project.name}' demonstrates: {MATCHED items joined by ', '}{'; deployed at: ' + project.url if project.url is not null}"`,
+    `evidence: "사이드 프로젝트 '{project.name}': {MATCHED 항목 나열}{'; 배포 URL: ' + project.url (URL이 있는 경우)}"`,
+  ],
   // Phase 6 — seniority gap
   [
     `rationale: "JD requires [N]+ years of [skill]; resume shows approximately [X] years"`,
     `rationale: "JD는 [skill] [N]년 이상을 요구하나, 이력서상 경력은 약 [X]년으로 추정됩니다"`,
   ],
-  // OUTPUT FORMAT example — rationale
+  // OUTPUT FORMAT example — requirement_type + rationale
   [
-    `"rationale": "JD requires GraphQL but it is absent from all resume skill fields and project tech stacks"`,
-    `"rationale": "GraphQL은 JD 필수 요건이나 이력서의 모든 기술 스택 및 프로젝트에서 확인되지 않습니다"`,
+    `"priority": "high", "requirement_type": "required", "rationale": "JD requires GraphQL but it is absent from all resume skill fields and project tech stacks"`,
+    `"priority": "high", "requirement_type": "required", "rationale": "GraphQL은 JD 필수 요건이나 이력서의 모든 기술 스택 및 프로젝트에서 확인되지 않습니다"`,
   ],
   // OUTPUT FORMAT example — summary
   [

@@ -534,6 +534,17 @@ ${retryFeedback}
   // Reuse resume cache for plan generation (maximize savings for same resume + different goal)
   const planCacheName = await getOrCreateResumeCache(apiKey, PLANNER_INSTRUCTION, resumeForAnalysis);
 
+  const existingProjects = resumeForAnalysis.projects ?? [];
+  const existingProjectsSection =
+    existingProjects.length > 0
+      ? existingProjects
+          .map(
+            (p) =>
+              `- ${p.name} [${p.tech_stack.join(", ")}]${p.url ? ` | URL: ${p.url}` : ""}${p.description ? `: ${p.description}` : ""}`
+          )
+          .join("\n")
+      : "(No side projects in resume)";
+
   const careerPlanData = await runWithQualityGate<any>(
     (retryFeedback) => {
       const prompt = `
@@ -567,6 +578,10 @@ Based on the target company/role, gap analysis, and career trend context below, 
 
 ⚠️ Each week MUST have at least ${QUALITY_THRESHOLDS.MIN_TODOS_PER_WEEK} todos.
 ⚠️ date_range must be in YYYY-MM-DD format and dates must be consecutive across weeks.
+⚠️ When portfolio-category gaps can be addressed by extending an existing side project listed below, PREFER that approach over building from scratch. Reference the project by name in the todo title/description.
+
+## User's Existing Side Projects (leverage these to address gaps):
+${existingProjectsSection}
 
 ## Gap Analysis Results:
 ${JSON.stringify(gapAnalysisData, null, 2)}

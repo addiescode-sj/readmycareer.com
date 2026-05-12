@@ -37,6 +37,7 @@ const generatePlanTool = new FunctionTool({
           current_level: z.string().nullable(),
           required_level: z.string().nullable(),
           priority: z.enum(["high", "medium", "low"]),
+          requirement_type: z.enum(["required", "preferred"]).default("required"),
           rationale: z.string(),
         })
       ),
@@ -44,6 +45,18 @@ const generatePlanTool = new FunctionTool({
     }),
     duration_weeks: z.number().int().min(1).max(52),
     start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    existing_projects: z
+      .array(
+        z.object({
+          name: z.string(),
+          tech_stack: z.array(z.string()),
+          description: z.string().nullable(),
+          achievements: z.array(z.string()),
+          url: z.string().nullable(),
+        })
+      )
+      .optional()
+      .describe("User's existing side projects — passed through to MCP for project-leveraging tasks"),
     preferences: z
       .object({
         hours_per_week: z.number().default(10),
@@ -63,14 +76,16 @@ const INSTRUCTION = `
 
 역할:
 - session.gap_analysis에 저장된 GapAnalyzerAgent의 분석 결과를 읽어옵니다.
+- session.resume_json이 있으면 projects[]를 추출하여 기존 사이드 프로젝트를 플랜에 반영합니다.
 - generate_career_plan 툴을 호출하여 주차별 커리어 준비 플랜을 생성합니다.
 - UI에서 바로 렌더링 가능한 타임라인(Gantt)과 주차별 투두리스트 JSON을 반환합니다.
 
 실행 절차:
 1. session.gap_analysis에서 gaps, strengths, target_role 추출.
-2. 사용자가 지정한 duration_weeks와 start_date 확인.
-3. generate_career_plan 툴에 위 데이터를 전달하여 플랜 생성.
-4. 생성된 CareerPlanOutput을 session.career_plan에 저장.
+2. session.resume_json이 있으면 session.resume_json.projects[] 목록도 추출 (기존 사이드 프로젝트).
+3. 사용자가 지정한 duration_weeks와 start_date 확인.
+4. generate_career_plan 툴 호출 시 gap_analysis, duration_weeks, start_date와 함께 existing_projects도 전달.
+5. 생성된 CareerPlanOutput을 session.career_plan에 저장.
 
 출력 형식:
 UI 렌더링을 위해 다음 JSON 스키마를 정확히 준수하세요:
@@ -131,6 +146,9 @@ export async function runPlanner(input: PlannerInput): Promise<CareerPlanOutput>
     userId: "system",
     state: {
       [SESSION_KEYS.GAP_ANALYSIS]: input.gap_analysis,
+      ...(input.resume_projects
+        ? { [SESSION_KEYS.RESUME_JSON]: { projects: input.resume_projects } }
+        : {}),
     },
   });
 

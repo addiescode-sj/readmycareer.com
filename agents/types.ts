@@ -49,6 +49,7 @@ export interface GapItem {
   current_level: string | null;
   required_level: string | null;
   priority: "high" | "medium" | "low";
+  requirement_type: "required" | "preferred"; // whether JD marks this as must-have or nice-to-have
   rationale: string;                     // explanation of why this gap matters
 }
 
@@ -57,6 +58,7 @@ export interface PlannerInput {
   gap_analysis: GapAnalysisOutput;
   duration_weeks: number;
   start_date: string;                    // YYYY-MM-DD
+  resume_projects?: ProjectEntry[];      // existing side projects to leverage in planning
   preferences?: {
     hours_per_week?: number;
     learning_style?: "online_course" | "book" | "project" | "mixed";
@@ -178,7 +180,7 @@ interface ExperienceEntry {
   achievements: string[];
 }
 
-interface ProjectEntry {
+export interface ProjectEntry {
   name: string;
   period: { start: string; end: string | null } | null;
   role: string | null;
@@ -226,6 +228,8 @@ export interface OptimizedResumeData {
   };
   highlights: string[];                  // max 5 ATS-friendly bullet points
   skills: string[];                      // flat list of key technologies / competencies
+  experience: ExperienceEntry[];         // work history; periods copied verbatim from input
+  projects: ProjectEntry[];              // side projects copied verbatim from input
   education: EducationEntry[];
   awards_and_certs: CertificationEntry[];
   cover_letter: string;                  // 5-6 sentence motivation paragraph

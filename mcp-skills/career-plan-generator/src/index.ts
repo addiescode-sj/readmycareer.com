@@ -14,7 +14,17 @@ const GapItemSchema = z.object({
   current_level: z.string().nullable().describe("Current proficiency level"),
   required_level: z.string().nullable().describe("Level required by JD"),
   priority: z.enum(["high", "medium", "low"]),
+  requirement_type: z.enum(["required", "preferred"]).default("required")
+    .describe("Whether the JD marks this as a must-have (required) or nice-to-have (preferred)"),
 });
+
+const ExistingProjectSchema = z.object({
+  name: z.string(),
+  tech_stack: z.array(z.string()),
+  description: z.string().nullable(),
+  achievements: z.array(z.string()),
+  url: z.string().nullable(),
+}).describe("An existing side project from the user's resume");
 
 export const PlanInputSchema = z.object({
   target_jd: z.object({
@@ -37,6 +47,10 @@ export const PlanInputSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .describe("Start date (YYYY-MM-DD)"),
+  existing_projects: z
+    .array(ExistingProjectSchema)
+    .optional()
+    .describe("User's existing side projects from the resume — leverage these to address gaps"),
   preferences: z
     .object({
       hours_per_week: z
@@ -147,6 +161,16 @@ async function generateCareerPlan(input: PlanInput): Promise<PlanOutput> {
     generationConfig: { responseMimeType: "application/json" },
   });
 
+  const existingProjectsSection =
+    input.existing_projects && input.existing_projects.length > 0
+      ? input.existing_projects
+          .map(
+            (p) =>
+              `  - ${p.name} [${p.tech_stack.join(", ")}]${p.url ? ` (${p.url})` : ""}${p.description ? `: ${p.description}` : ""}`
+          )
+          .join("\n")
+      : "  (none)";
+
   const prompt = `You are a career planning expert. Generate a ${input.duration_weeks}-week career plan in JSON format based on the following information.
 
 ## Input Information
@@ -157,8 +181,10 @@ async function generateCareerPlan(input: PlanInput): Promise<PlanOutput> {
 - Required Skills: ${input.target_jd.required_skills.join(", ")}
 - Preferred Skills: ${input.target_jd.preferred_skills.join(", ")}
 - Gap List (Ordered by priority):
-${input.gap_analysis.gaps.map((g, i) => `  ${i + 1}. [${g.priority}] ${g.item} (${g.category}) - Current: ${g.current_level ?? "None"}, Required: ${g.required_level ?? "Expert level"}`).join("\n")}
+${input.gap_analysis.gaps.map((g, i) => `  ${i + 1}. [${(g.requirement_type ?? "required").toUpperCase()}][${g.priority}] ${g.item} (${g.category}) - Current: ${g.current_level ?? "None"}, Required: ${g.required_level ?? "Expert level"}`).join("\n")}
 - Strengths: ${input.gap_analysis.strengths.join(", ")}
+- Existing Side Projects (leverage these to address gaps):
+${existingProjectsSection}
 - Weekly Date Ranges: ${JSON.stringify(weekRanges)}
 
 ## Output JSON Structure
@@ -192,10 +218,14 @@ ${input.gap_analysis.gaps.map((g, i) => `  ${i + 1}. [${g.priority}] ${g.item} (
 
 Rules:
 - Generate at least 3 specific todos for each week.
-- Place high priority gaps in the early weeks.
+- [REQUIRED] gaps MUST be scheduled in weeks 1 through ${Math.ceil(input.duration_weeks * 0.6)} (first 60% of the plan). These are disqualifying gaps — address them first.
+- [PREFERRED] gaps should be scheduled in the second half of the plan (weeks ${Math.ceil(input.duration_weeks * 0.6) + 1}+). These are bonus qualifications.
+- Within each tier ([REQUIRED] / [PREFERRED]), order by priority: high → medium → low.
 - Set milestones every 3-4 weeks or upon closing a major gap.
 - Generate todo IDs in "todo_{week}_{index}" format.
-- Provide real-world learning resources (courses, books, docs) with URLs.`;
+- Provide real-world learning resources (courses, books, docs) with URLs.
+- When portfolio-category gaps can be addressed by extending or improving an existing side project listed above, PREFER that approach over building from scratch. Reference the project by name in the todo title and description (e.g., "Extend [project name] to add [missing feature]").
+- Use the existing projects as building blocks: if a project uses a subset of required skills, suggest adding the missing required skills to that project.`;
 
   const maxRetries = 3;
   let parsed: any;
