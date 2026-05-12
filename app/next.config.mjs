@@ -31,9 +31,6 @@ const nextConfig = {
   // Node.js-only packages excluded from Edge Runtime
   transpilePackages: ["@readmycareer/agents"],
   experimental: {
-    outputFileTracingIncludes: {
-      "/api/resume-optimizer": ["../mcp-skills/resume-generator/dist/**/*"],
-    },
     serverComponentsExternalPackages: [
       "@modelcontextprotocol/sdk",
       "@pinecone-database/pinecone",
