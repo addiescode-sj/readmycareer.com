@@ -14,8 +14,6 @@ The base model is **Gemini 3.1 Flash Lite** (free tier). This model was chosen w
 
 Because raw job descriptions often lack the full context needed to accurately assess a candidate's readiness, the system integrates a **Pinecone RAG vector database** seeded with career and tech industry knowledge. This supplementary context gives the agents a more grounded view of role requirements, typical skill progressions, and hiring patterns — beyond what's explicitly written in any single JD.
 
-**Current version: `v0.4.0`**
-
 ---
 
 ## Features
@@ -171,8 +169,6 @@ The app will be available at `http://localhost:3000`.
 ## Changelog
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full version history.
-
-**Latest: [v0.4.0](https://github.com/addiescode-sj/readmycareer.com/releases/tag/v0.4.0)** — Gemini Resume Optimizer
 
 ---
 
