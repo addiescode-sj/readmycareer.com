@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.1] - 2026-05-12
+
+### Fixed
+
+- **Resume optimizer 500 error (Vercel deploy)**: `mcp-skills/resume-generator` was never compiled during Vercel deployment — `dist/` is gitignored and the build command did not include the MCP skill package. Added `pnpm --filter @readmycareer/mcp-resume-generator build` to `vercel.json` and configured `outputFileTracingIncludes` in `next.config.mjs` so the compiled skill is bundled with the serverless function. ([`dd44170`](../../commit/dd44170))
+- **AI coach chat silent failure**: SSE consumer in `AICoachChat` only handled `{ text }` events and silently discarded `{ error }` payloads. When the Gemini API returned an error the chat showed a permanent loading indicator with no message. Now surfaces the error text to the user. ([`b31d980`](../../commit/b31d980))
+
+---
+
 ## [0.5.0] - 2026-05-12
 
 ### Added
