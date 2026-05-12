@@ -8,6 +8,7 @@ import {
   PolarGrid,
   PolarAngleAxis,
   ResponsiveContainer,
+  Legend,
 } from "recharts";
 
 interface RadarAxisTickProps {
@@ -42,8 +43,17 @@ function RadarAxisTick({ x = 0, y = 0, payload, onHover, descriptions }: RadarAx
   );
 }
 
+export interface RadarPoint {
+  name: string;
+  // Legacy single-score format (backward compat with old data)
+  score?: number;
+  // Dual-score format for required vs preferred distinction
+  requiredScore?: number;
+  preferredScore?: number;
+}
+
 interface Props {
-  data: Array<{ name: string; score: number }>;
+  data: RadarPoint[];
   height?: number;
   outerRadius?: string;
   margin?: { top?: number; right?: number; bottom?: number; left?: number };
@@ -71,10 +81,19 @@ export function CompetencyRadar({ data, height = 240, outerRadius = "75%", margi
     []
   );
 
+  // Normalize data: if only `score` is present, project it to both axes
+  const normalizedData = data.map(d => ({
+    name: d.name,
+    requiredScore: d.requiredScore ?? d.score ?? 0,
+    preferredScore: d.preferredScore ?? d.score ?? 0,
+  }));
+
+  const isDual = data.some(d => d.requiredScore !== undefined || d.preferredScore !== undefined);
+
   return (
     <div className="relative w-full" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <RadarChart cx="50%" cy="50%" outerRadius={outerRadius} data={data} margin={margin}>
+        <RadarChart cx="50%" cy="50%" outerRadius={outerRadius} data={normalizedData} margin={margin}>
           <PolarGrid stroke="rgba(139,92,246,0.1)" />
           <PolarAngleAxis
             dataKey="name"
@@ -85,13 +104,33 @@ export function CompetencyRadar({ data, height = 240, outerRadius = "75%", margi
               />
             }
           />
+          {/* Preferred (bonus) — dashed, lighter, rendered first so it sits behind */}
+          {isDual && (
+            <Radar
+              name={t("radarLegendPreferred")}
+              dataKey="preferredScore"
+              stroke="hsl(var(--secondary))"
+              fill="hsl(var(--secondary))"
+              fillOpacity={0.08}
+              strokeDasharray="4 3"
+              strokeWidth={1.5}
+            />
+          )}
+          {/* Required (must-have) — solid, primary color, rendered on top */}
           <Radar
-            name="Score"
-            dataKey="score"
+            name={isDual ? t("radarLegendRequired") : t("radarLegendScore")}
+            dataKey="requiredScore"
             stroke="hsl(var(--primary))"
             fill="hsl(var(--primary))"
             fillOpacity={0.15}
+            strokeWidth={2}
           />
+          {isDual && (
+            <Legend
+              iconType="plainline"
+              wrapperStyle={{ fontSize: "10px", paddingTop: "4px" }}
+            />
+          )}
         </RadarChart>
       </ResponsiveContainer>
       {radarTooltip && (

@@ -11,6 +11,7 @@ interface RawGap {
   category: string;
   item: string;
   priority: "high" | "medium" | "low";
+  requirement_type?: "required" | "preferred";
   rationale?: string;
 }
 
@@ -45,13 +46,24 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const ALL_CATEGORIES = ["skill", "experience", "certification", "portfolio", "keyword"] as const;
 
+// Fallback: treat high-priority gaps as required when requirement_type is absent (legacy data)
+function isRequired(g: RawGap) {
+  return g.requirement_type === "required" || (!g.requirement_type && g.priority === "high");
+}
+
 function deriveCompetencies(strengths: RawStrength[], gaps: RawGap[]) {
   return ALL_CATEGORIES.map((cat) => {
     const s = strengths.filter((x) => x.category === cat).length;
-    const g = gaps.filter((x) => x.category === cat).length;
-    const total = s + g;
-    const score = total > 0 ? Math.round((s / total) * 100) : 0;
-    return { name: CATEGORY_LABELS[cat], score };
+    const reqGaps = gaps.filter((x) => x.category === cat && isRequired(x)).length;
+    const prefGaps = gaps.filter((x) => x.category === cat && !isRequired(x)).length;
+
+    const reqTotal = s + reqGaps;
+    const prefTotal = s + prefGaps;
+
+    const requiredScore = reqTotal > 0 ? Math.round((s / reqTotal) * 100) : 100;
+    const preferredScore = prefTotal > 0 ? Math.round((s / prefTotal) * 100) : 100;
+
+    return { name: CATEGORY_LABELS[cat], requiredScore, preferredScore };
   });
 }
 

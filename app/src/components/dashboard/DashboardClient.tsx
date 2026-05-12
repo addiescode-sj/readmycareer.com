@@ -12,7 +12,7 @@ import { CompetencyRadar } from "@/components/ui/CompetencyRadar";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 interface GapAnalysis {
-  competencies: Array<{ name: string; score: number }>;
+  competencies: Array<{ name: string; requiredScore: number; preferredScore: number }>;
   findings: Array<{ text: string; priority: "high" | "medium" | "low" }>;
 }
 
@@ -26,6 +26,7 @@ interface RawGap {
   category: string;
   item: string;
   priority: "high" | "medium" | "low";
+  requirement_type?: "required" | "preferred";
   rationale?: string;
 }
 
@@ -52,12 +53,21 @@ function deriveGapAnalysis(summaryJson: unknown): GapAnalysis | null {
   const gaps = raw.gaps ?? [];
   if (strengths.length === 0 && gaps.length === 0) return null;
 
+  const isRequired = (g: RawGap) =>
+    g.requirement_type === "required" || (!g.requirement_type && g.priority === "high");
+
   const competencies = ALL_CATEGORIES.map((cat) => {
     const s = strengths.filter((x) => x.category === cat).length;
-    const g = gaps.filter((x) => x.category === cat).length;
-    const total = s + g;
-    const score = total > 0 ? Math.round((s / total) * 100) : 0;
-    return { name: CATEGORY_LABELS[cat], score };
+    const reqGaps = gaps.filter((x) => x.category === cat && isRequired(x)).length;
+    const prefGaps = gaps.filter((x) => x.category === cat && !isRequired(x)).length;
+
+    const reqTotal = s + reqGaps;
+    const prefTotal = s + prefGaps;
+
+    const requiredScore = reqTotal > 0 ? Math.round((s / reqTotal) * 100) : 100;
+    const preferredScore = prefTotal > 0 ? Math.round((s / prefTotal) * 100) : 100;
+
+    return { name: CATEGORY_LABELS[cat], requiredScore, preferredScore };
   });
 
   const findings = gaps.map((g) => ({

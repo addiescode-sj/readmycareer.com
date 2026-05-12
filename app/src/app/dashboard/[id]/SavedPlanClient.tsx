@@ -11,7 +11,7 @@ import RoadmapView from "@/components/RoadmapView";
 import { OptimizedResumeModal } from "@/components/OptimizedResumeModal";
 import { createClient } from "@/lib/supabase/client";
 
-interface Competency { name: string; score: number }
+interface Competency { name: string; score?: number; requiredScore?: number; preferredScore?: number }
 interface Finding { text: string; priority: "high" | "medium" | "low" }
 
 interface CareerPlan {
@@ -24,7 +24,11 @@ interface CareerPlan {
   start_date: string;
   end_date: string;
   weeks: unknown[];
-  gap_analysis: { competencies?: Competency[]; findings?: Finding[] } | null;
+  gap_analysis: {
+    competencies?: Competency[];
+    findings?: Finding[];
+    overall_match_score?: number | null;
+  } | null;
 }
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -176,9 +180,11 @@ export default function SavedPlanClient({
   const competencies = plan.gap_analysis?.competencies ?? [];
   const findings = plan.gap_analysis?.findings ?? [];
   const overallPct =
-    competencies.length > 0
+    plan.gap_analysis?.overall_match_score != null
+      ? plan.gap_analysis.overall_match_score
+      : competencies.length > 0
       ? Math.round(
-          competencies.reduce((s, c) => s + c.score, 0) / competencies.length
+          competencies.reduce((s, c) => s + (c.requiredScore ?? c.score ?? 0), 0) / competencies.length
         )
       : 0;
 

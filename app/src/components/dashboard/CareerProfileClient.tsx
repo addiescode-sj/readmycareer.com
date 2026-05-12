@@ -10,7 +10,9 @@ import { createClient } from "@/lib/supabase/client";
 
 interface Competency {
   name: string;
-  score: number;
+  score?: number;
+  requiredScore?: number;
+  preferredScore?: number;
 }
 
 interface Finding {
