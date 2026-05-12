@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd .. && pnpm --filter @readmycareer/agents build && pnpm --filter app build",
+  "buildCommand": "cd .. && pnpm --filter @readmycareer/agents build && pnpm --filter @readmycareer/mcp-resume-generator build && pnpm --filter app build",
   "outputDirectory": ".next",
   "installCommand": "cd .. && pnpm install"
 }
