@@ -15,6 +15,21 @@ interface OptimizedResumeData {
   };
   highlights: string[];
   skills: string[];
+  experience: Array<{
+    company: string;
+    title: string;
+    period: { start: string; end: string | null };
+    achievements: string[];
+  }>;
+  projects: Array<{
+    name: string;
+    period: { start: string; end: string | null } | null;
+    role: string | null;
+    tech_stack: string[];
+    description: string | null;
+    achievements: string[];
+    url: string | null;
+  }>;
   education: Array<{
     institution: string;
     degree: string | null;
@@ -85,11 +100,13 @@ export function OptimizedResumeModal({ data, onClose }: Props) {
     const lang = record.meta?.language ?? record.locale ?? "en";
     const isKo = lang === "ko";
     const labels = {
-      highlights: isKo ? "핵심 성과 및 강점" : "Key Highlights",
-      skills:     isKo ? "주요 기술" : "Key Skills",
-      education:  isKo ? "학력" : "Education",
-      awards:     isKo ? "수상 내역 및 자격증" : "Awards & Certifications",
-      cover:      isKo ? "지원 동기" : "Cover Letter",
+      highlights:  isKo ? "핵심 성과 및 강점" : "Key Highlights",
+      skills:      isKo ? "주요 기술" : "Key Skills",
+      experience:  isKo ? "경력사항" : "Work Experience",
+      projects:    isKo ? "프로젝트" : "Projects",
+      education:   isKo ? "학력" : "Education",
+      awards:      isKo ? "수상 내역 및 자격증" : "Awards & Certifications",
+      cover:       isKo ? "지원 동기" : "Cover Letter",
     };
     const d = resumeData;
     const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -99,6 +116,20 @@ export function OptimizedResumeModal({ data, onClose }: Props) {
       .map(h => `<li>${esc(h)}</li>`).join("");
     const skillsHtml = (d?.skills ?? [])
       .map(s => `<span class="skill">${esc(s)}</span>`).join("");
+    const experienceHtml = (d?.experience ?? []).map(e => {
+      const period = `${esc(e.period.start)}${e.period.end ? ` – ${esc(e.period.end)}` : " – present"}`;
+      const achievementsHtml = e.achievements.map(a => `<li>${esc(a)}</li>`).join("");
+      return `<div class="exp-entry"><strong>${esc(e.title)}</strong> — ${esc(e.company)} <span class="dim">(${period})</span>${achievementsHtml ? `<ul class="exp-list">${achievementsHtml}</ul>` : ""}</div>`;
+    }).join("");
+    const projectsHtml = (d?.projects ?? []).map(p => {
+      const period = p.period
+        ? `${esc(p.period.start)}${p.period.end ? ` – ${esc(p.period.end)}` : ""}`
+        : null;
+      const meta = [p.role, p.tech_stack.join(", ")].filter(Boolean).map(v => esc(v!)).join("  |  ");
+      const achievementsHtml = p.achievements.map(a => `<li>${esc(a)}</li>`).join("");
+      const urlHtml = p.url ? ` <a href="${esc(ensureHttps(p.url))}" class="proj-link">${isKo ? "프로젝트 링크" : "Project Link"}</a>` : "";
+      return `<div class="proj-entry"><strong>${esc(p.name)}</strong>${period ? ` <span class="dim">(${period})</span>` : ""}${urlHtml}${meta ? `<div class="proj-meta">${meta}</div>` : ""}${achievementsHtml ? `<ul class="exp-list">${achievementsHtml}</ul>` : ""}</div>`;
+    }).join("");
     const educationHtml = (d?.education ?? []).map(e => {
       const degree = [e.degree, e.major].filter((v): v is string => Boolean(v)).map(esc).join(", ");
       const period = `${esc(e.period.start)}${e.period.end ? ` – ${esc(e.period.end)}` : ""}`;
@@ -111,6 +142,10 @@ export function OptimizedResumeModal({ data, onClose }: Props) {
       `<a href="${esc(ensureHttps(l))}">${esc(l.replace(/^https?:\/\//, ""))}</a>`
     ).join("");
 
+    const tipHtml = isKo
+      ? `<div id="tip"><strong>📌 PDF 저장 전:</strong> Chrome 인쇄 창 → <strong>더 많은 설정</strong> → <strong>헤더 및 바닥글</strong> 체크 해제 후 저장하세요.</div>`
+      : `<div id="tip"><strong>📌 Before saving PDF:</strong> In Chrome print dialog → <strong>More settings</strong> → uncheck <strong>Headers and footers</strong>.</div>`;
+
     const html = `<!DOCTYPE html>
 <html lang="${isKo ? "ko" : "en"}">
 <head>
@@ -118,24 +153,32 @@ export function OptimizedResumeModal({ data, onClose }: Props) {
   <title>${esc(d?.personal?.name ?? "Resume")}</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:Arial,sans-serif;font-size:11pt;color:#111;line-height:1.55;padding:0.7in}
+    body{font-family:Arial,sans-serif;font-size:11pt;color:#111;line-height:1.55}
     h1{font-size:20pt;font-weight:900;letter-spacing:-0.5px}
     .job-title{font-size:12pt;color:#6d28d9;margin-top:3px;font-weight:700}
     .contact{display:flex;flex-wrap:wrap;gap:12px;margin-top:5px;font-size:9pt;color:#555}
     .contact a{color:#6d28d9;text-decoration:none}
-    .section-label{font-size:7.5pt;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#6d28d9;margin:20px 0 5px;padding-bottom:3px;border-bottom:1.5px solid #ede9fe}
+    .section-label{font-size:7.5pt;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#6d28d9;margin:20px 0 6px;padding-bottom:4px;border-bottom:1.5px solid #ede9fe;break-after:avoid;page-break-after:avoid}
     ul{padding-left:18px;margin:0}
-    li{margin-bottom:5px;font-size:10.5pt}
+    li{margin-bottom:5px;font-size:10.5pt;break-inside:avoid;page-break-inside:avoid}
     .skills{display:flex;flex-wrap:wrap;gap:5px}
     .skill{background:#f5f3ff;border:1px solid #ddd6fe;border-radius:4px;padding:2px 8px;font-size:9pt}
-    .entry{margin-bottom:5px;font-size:10.5pt}
+    .entry{margin-bottom:6px;font-size:10.5pt;break-inside:avoid;page-break-inside:avoid}
+    .exp-entry{margin-bottom:12px;font-size:10.5pt;break-inside:avoid;page-break-inside:avoid}
+    .exp-list{padding-left:16px;margin:4px 0 0}
+    .exp-list li{margin-bottom:3px;font-size:10pt}
     .dim{color:#666;font-size:9.5pt}
+    .proj-entry{margin-bottom:12px;font-size:10.5pt;break-inside:avoid;page-break-inside:avoid}
+    .proj-meta{font-size:9.5pt;color:#555;margin:2px 0 3px;font-style:italic}
+    .proj-link{font-size:9pt;color:#6d28d9;text-decoration:none;margin-left:6px}
     .cover{font-size:10.5pt;line-height:1.8;white-space:pre-line}
-    @page{margin:0}
-    @media print{body{padding:0.7in}}
+    #tip{background:#faf5ff;border:1.5px solid #7c3aed;border-radius:8px;padding:11px 15px;margin-bottom:18px;font-size:9.5pt;color:#4c1d95;line-height:1.6}
+    @page{margin:0.75in;size:A4}
+    @media print{#tip{display:none}p,.cover,li{orphans:3;widows:3}}
   </style>
 </head>
 <body>
+  ${tipHtml}
   <h1>${esc(d?.personal?.name ?? "")}</h1>
   <div class="job-title">${esc(d?.personal?.job_title ?? "")}</div>
   <div class="contact">
@@ -145,6 +188,8 @@ export function OptimizedResumeModal({ data, onClose }: Props) {
   </div>
   ${highlightsHtml ? `<div class="section-label">${labels.highlights}</div><ul>${highlightsHtml}</ul>` : ""}
   ${skillsHtml ? `<div class="section-label">${labels.skills}</div><div class="skills">${skillsHtml}</div>` : ""}
+  ${experienceHtml ? `<div class="section-label">${labels.experience}</div>${experienceHtml}` : ""}
+  ${projectsHtml ? `<div class="section-label">${labels.projects}</div>${projectsHtml}` : ""}
   ${educationHtml ? `<div class="section-label">${labels.education}</div>${educationHtml}` : ""}
   ${awardsHtml ? `<div class="section-label">${labels.awards}</div>${awardsHtml}` : ""}
   ${d?.cover_letter ? `<div class="section-label">${labels.cover}</div><p class="cover">${esc(d.cover_letter)}</p>` : ""}
@@ -276,6 +321,83 @@ export function OptimizedResumeModal({ data, onClose }: Props) {
                   </span>
                 ))}
               </div>
+            </section>
+          )}
+
+          {/* Work Experience */}
+          {resumeData?.experience?.length > 0 && (
+            <section>
+              <h4 className="text-xs font-black uppercase tracking-[0.15em] text-primary/70 mb-3">
+                {t("sectionExperience")}
+              </h4>
+              <ul className="space-y-4">
+                {resumeData.experience.map((e, i) => {
+                  const period = `${e.period.start}${e.period.end ? ` – ${e.period.end}` : " – present"}`;
+                  return (
+                    <li key={i}>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-semibold text-foreground">{e.title}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{period}</span>
+                      </div>
+                      <p className="text-xs text-primary font-medium mb-1">{e.company}</p>
+                      <ul className="space-y-1 mt-1">
+                        {e.achievements.map((a, j) => (
+                          <li key={j} className="flex items-start gap-1.5 text-sm text-foreground leading-relaxed">
+                            <span className="w-1 h-1 rounded-full bg-muted-foreground mt-2 shrink-0" />
+                            {a}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+
+          {/* Projects */}
+          {resumeData?.projects?.length > 0 && (
+            <section>
+              <h4 className="text-xs font-black uppercase tracking-[0.15em] text-primary/70 mb-3">
+                {t("sectionProjects")}
+              </h4>
+              <ul className="space-y-4">
+                {resumeData.projects.map((p, i) => {
+                  const period = p.period
+                    ? `${p.period.start}${p.period.end ? ` – ${p.period.end}` : ""}`
+                    : null;
+                  const meta = [p.role, p.tech_stack.join(", ")].filter(Boolean).join("  |  ");
+                  return (
+                    <li key={i}>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-semibold text-foreground">{p.name}</span>
+                        {period && <span className="text-xs text-muted-foreground shrink-0">{period}</span>}
+                      </div>
+                      {meta && <p className="text-xs text-muted-foreground italic mb-1">{meta}</p>}
+                      {p.url && (
+                        <a
+                          href={/^https?:\/\//.test(p.url) ? p.url : `https://${p.url}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline mb-1 inline-block"
+                        >
+                          {p.url.replace(/^https?:\/\//, "")}
+                        </a>
+                      )}
+                      {p.achievements.length > 0 && (
+                        <ul className="space-y-1 mt-1">
+                          {p.achievements.map((a, j) => (
+                            <li key={j} className="flex items-start gap-1.5 text-sm text-foreground leading-relaxed">
+                              <span className="w-1 h-1 rounded-full bg-muted-foreground mt-2 shrink-0" />
+                              {a}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             </section>
           )}
 

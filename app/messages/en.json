@@ -121,6 +121,8 @@
     "downloadPdf": "Save as PDF",
     "sectionHighlights": "Key Highlights",
     "sectionSkills": "Key Skills",
+    "sectionExperience": "Work Experience",
+    "sectionProjects": "Projects",
     "sectionEducation": "Education",
     "sectionAwardsCerts": "Awards & Certifications",
     "sectionCoverLetter": "Cover Letter"
@@ -241,6 +243,9 @@
     "radarTooltipKeyword": "Keyword alignment: domain terms, methodologies, and patterns from the JD (e.g. CI/CD, microservices, agile)",
     "radarTooltipPortfolio": "Portfolio proof: projects demonstrating required skills at appropriate production scale",
     "radarTooltipCert": "Certifications: possession of certificates explicitly required or preferred in the JD",
+    "radarLegendRequired": "Required match",
+    "radarLegendPreferred": "Preferred match",
+    "radarLegendScore": "Match score",
     "applicationStatus": "Application Status",
     "applicationStatusPlaceholder": "Select status...",
     "statusApplied": "Applied",

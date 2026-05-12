@@ -121,6 +121,8 @@
     "downloadPdf": "PDF로 저장",
     "sectionHighlights": "핵심 성과 및 강점",
     "sectionSkills": "주요 기술",
+    "sectionExperience": "경력사항",
+    "sectionProjects": "프로젝트",
     "sectionEducation": "학력",
     "sectionAwardsCerts": "수상 내역 및 자격증",
     "sectionCoverLetter": "지원 동기"
@@ -241,6 +243,9 @@
     "radarTooltipKeyword": "키워드 정렬: JD에 언급된 도메인 용어·방법론·패턴 포함 여부 (예: CI/CD, 마이크로서비스, 애자일)",
     "radarTooltipPortfolio": "포트폴리오 증명: 프로젝트를 통한 실제 기술 증명 및 프로덕션 규모 경험 유무",
     "radarTooltipCert": "자격증: JD에서 요구하거나 선호하는 자격증 보유 여부",
+    "radarLegendRequired": "필수 충족률",
+    "radarLegendPreferred": "우대 충족률",
+    "radarLegendScore": "매칭 점수",
     "applicationStatus": "지원 현황",
     "applicationStatusPlaceholder": "상태 선택...",
     "statusApplied": "서류 지원 완료",
