@@ -272,21 +272,37 @@ ${ragText || "관련 자료 없음"}
 ${locale === "en" ? "⚠️ LANGUAGE: Always respond in English regardless of the language of the context or question." : "⚠️ LANGUAGE: 항상 한국어로 답변하세요. JD나 질문이 영어로 작성되어 있어도 반드시 한국어로 답변하세요."}`;
 
       const GENERATION_TIMEOUT = 30_000;
-      const result = await Promise.race([
-        model.generateContentStream([
-          { text: systemPrompt },
-          { text: `사용자 질문: ${message}` },
-        ]),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.")),
-            GENERATION_TIMEOUT
-          )
-        ),
-      ]);
+      const MAX_STREAM_RETRIES = 2;
+      let result: Awaited<ReturnType<typeof model.generateContentStream>> | null = null;
+
+      for (let attempt = 0; attempt <= MAX_STREAM_RETRIES; attempt++) {
+        try {
+          result = await Promise.race([
+            model.generateContentStream([
+              { text: systemPrompt },
+              { text: `사용자 질문: ${message}` },
+            ]),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error("응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.")),
+                GENERATION_TIMEOUT
+              )
+            ),
+          ]);
+          break;
+        } catch (err: any) {
+          const msg: string = err?.message ?? "";
+          const is503 = msg.includes("503") || msg.toLowerCase().includes("service unavailable");
+          if (is503 && attempt < MAX_STREAM_RETRIES) {
+            await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+            continue;
+          }
+          throw err;
+        }
+      }
 
       const CHUNK_TIMEOUT = 15_000;
-      const streamIter = result.stream[Symbol.asyncIterator]();
+      const streamIter = result!.stream[Symbol.asyncIterator]();
       while (true) {
         let chunkTimer: ReturnType<typeof setTimeout>;
         const next = await Promise.race([
@@ -314,9 +330,15 @@ ${locale === "en" ? "⚠️ LANGUAGE: Always respond in English regardless of th
         raw.includes("429") ||
         raw.toLowerCase().includes("quota") ||
         raw.toLowerCase().includes("too many requests");
+      const isServerBusy =
+        raw.includes("503") ||
+        raw.toLowerCase().includes("service unavailable") ||
+        raw.toLowerCase().includes("high demand");
       const errMsg = isQuota
         ? "현재 AI 서비스 일일 사용량이 초과되었습니다. 내일 다시 시도해주세요."
-        : raw;
+        : isServerBusy
+        ? "AI 서비스가 일시적으로 혼잡합니다. 잠시 후 다시 시도해주세요."
+        : "AI 서비스에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해주세요.";
       await writer.write(
         encoder.encode(`data: ${JSON.stringify({ error: errMsg })}\n\n`)
       );
