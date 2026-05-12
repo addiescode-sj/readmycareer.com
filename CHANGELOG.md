@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - 2026-05-12
+
+### Added
+
+- **Resume projects integration (gap analysis)**: Phase 5c added to the gap analyzer — for each project in `resume_json.projects[]`, tech stack items that intersect JD requirements are emitted as `category:"portfolio"` strengths. ([`53873cb`](../../commit/53873cb))
+- **Resume projects integration (career planning)**: Orchestrator and career-plan-generator MCP skill now receive the user's existing side projects. When a portfolio gap can be addressed by extending an existing project, the planner references it by name instead of suggesting a new build-from-scratch project. ([`53873cb`](../../commit/53873cb))
+- **Resume projects integration (resume generation)**: Resume generator MCP skill outputs a **Projects** section (after Work Experience). Structural fields — name, period, tech stack, URL — are copied verbatim from the input resume; `achievements` are rewritten by the LLM in the user's locale for consistent language. ([`53873cb`](../../commit/53873cb))
+- **Dual-score CompetencyRadar**: Radar chart now renders two layers — solid primary for **required** match score and dashed secondary for **preferred** match score — derived from the new `requirement_type` field on gap items. Backward-compatible with legacy single-score data. ([`5a608e4`](../../commit/5a608e4))
+- **`requirement_type` on gap items**: Gap analyzer emits `requirement_type: "required" | "preferred"` on every gap item so downstream components can distinguish must-have from nice-to-have gaps. Phase 8 scoring updated to weight required gaps 2× and preferred gaps 0.5×. ([`53873cb`](../../commit/53873cb))
+- **Projects section in optimized resume modal**: `OptimizedResumeModal` renders the projects section between Work Experience and Education, including PDF export support. ([`5af47ee`](../../commit/5af47ee))
+- **Eval metrics for project integration**: Agent harness gains `project_portfolio_strength_rate` (≥ 80 %) and `project_plan_integration_rate` (≥ 70 %) metrics. ([`1ed8889`](../../commit/1ed8889))
+
+### Fixed
+
+- **Resume optimizer 500 error**: `upsert` was specifying `onConflict: "career_plan_id,user_id"` but the `optimized_resumes` table has a unique constraint on `career_plan_id` alone. Changed to match the actual constraint. ([`6d6a163`](../../commit/6d6a163))
+- **Optimized resume idempotency**: Previously returned a cached row even when it lacked a `projects` field (pre-feature data). Now forces regeneration for any row missing `projects[]`, enabling seamless migration of legacy records. ([`6d6a163`](../../commit/6d6a163))
+- **Projects section rendered in wrong locale**: Achievements were copied verbatim from the original English-language resume instead of being rewritten by the LLM. Added an explicit locale instruction (`projects[].achievements: rewrite each bullet in the output language`) and switched to the same merge pattern used for work experience. ([`53873cb`](../../commit/53873cb))
+
+### Changed
+
+- **Keyword extraction in resume optimizer**: `extractKeywords` now returns separate `required` and `preferred` keyword lists ordered by `requirement_type`, matching the scoring change in the gap analyzer. ([`53873cb`](../../commit/53873cb))
+- **Overall readiness %** on the saved plan page now reads `overall_match_score` directly from the gap analysis JSON when present, falling back to averaging `requiredScore` values across competency axes. ([`5a608e4`](../../commit/5a608e4))
+
+---
+
 ## [0.4.0] - 2026-05-11
 
 ### Added
