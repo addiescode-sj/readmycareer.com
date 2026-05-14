@@ -1,6 +1,6 @@
 # User Stories — Personal Career Manager AI Agent
 
-> 📄 Generated based on PRD | Total 21 Stories | Last Updated: 2026-04-18
+> 📄 Generated based on PRD | Total 31 Stories | Last Updated: 2026-05-14
 > Finalized: Includes direct JD paste input / RAG reference retrieval for planning / Account-based / Chat History DB Storage
 
 ---
@@ -551,6 +551,9 @@
 - [ ] Applied JD keyword chips are shown in the modal header
 - [ ] "Copy Markdown" copies the full resume to clipboard
 - [ ] "Download .md" triggers a browser file download of the raw markdown
+- [ ] "Copy Link" copies `{origin}/share/{id}` to the clipboard AND opens the public share page in a new tab simultaneously
+- [ ] "Copy Link" button is only rendered when the resume `id` is present in the record
+- [ ] "Copy Link" button label changes to "Link Copied!" for 2 seconds after a successful copy, then reverts
 - [ ] "PDF로 저장" opens a print-ready HTML page and triggers the browser print/save-as-PDF dialog
 - [ ] PDF output uses `@page { margin: 0 }` to suppress browser-generated print headers (date, title) and footers (URL, page number)
 - [ ] All external links in the PDF (LinkedIn, GitHub, etc.) are normalized to `https://` before rendering
@@ -566,6 +569,27 @@
 - [ ] No duplicate rows in `optimized_resumes` for the same career plan
 - [ ] UNIQUE constraint on `optimized_resumes.career_plan_id` enforced at DB level
 - [ ] On page load, the client queries Supabase for an existing `optimized_resumes` row; if found, the button state is pre-set to "completed" without requiring a new generation
+
+---
+
+#### US-031: Public Shareable Resume Page
+**As a** recruiter or hiring manager who received a resume link,
+**I want to** view the candidate's resume at a public URL without logging in,
+**So that** I can review their profile immediately without creating an account.
+
+**Acceptance Criteria:**
+- [ ] Visiting `/share/{id}` renders the full resume without authentication
+- [ ] All resume sections appear in the same order as the modal: personal info, highlights, skills, experience, projects, education, awards, cover letter
+- [ ] A sticky glassmorphism header displays the readmycareer.com logo and a "PDF로 저장" button
+- [ ] A footer shows a CTA linking to readmycareer.com ("Create your own resume →")
+- [ ] Section labels are localized: Korean if the resume was generated in Korean, English otherwise
+- [ ] og:title and og:description meta tags are populated from the resume's name and job title (for social sharing previews)
+- [ ] Visiting `/share/not-a-uuid` (invalid format) renders a 404 page
+- [ ] Visiting `/share/{deleted-id}` (valid UUID, no matching row) renders a 404 page
+- [ ] The page is accessible without login (anon Supabase SELECT allowed via RLS; UUID is unguessable)
+- [ ] Authenticated users' own data is still protected by the existing owner-only RLS policy
+
+**Notes:** Route: `app/src/app/share/[id]/page.tsx` (server component). RLS migration: `20260514000000_add_optimized_resumes_public_policy.sql`. PDF export reuses existing PDF generation logic via a `SharePagePdfButton` client component.
 
 ---
 
@@ -585,5 +609,6 @@
 | Priority | Points | Stories |
 |----------|--------|---------|
 | 🔴 Must  | 10     | US-025, US-026, US-027, US-028, US-029, US-030 |
+| 🟡 Should| 2      | US-031 |
 
-**Story Point Breakdown:** US-025 (2), US-026 (3), US-027 (1), US-028 (2), US-029 (1), US-030 (1) → Total: 10 points
+**Story Point Breakdown:** US-025 (2), US-026 (3), US-027 (1), US-028 (2), US-029 (1), US-030 (1), US-031 (2) → Total: 12 points
