@@ -3,9 +3,20 @@
 import { useState, useRef } from "react";
 import Image from "next/image";
 import { useTranslations, useLocale } from "next-intl";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/hooks/useSession";
 import { AnalysisProgressOverlay } from "./ui/AnalysisProgressOverlay";
 import { Logo } from "./ui/Logo";
+
+const RESUME_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+async function computeFileHash(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 const JD_TEXT_MIN_LENGTH = 50;
 const JD_TEXT_MAX_LENGTH = 10000;
@@ -15,6 +26,7 @@ export default function InitializeWorkspace() {
   const tWork = useTranslations("InitializeWorkspace");
   const locale = useLocale() as "ko" | "en";
   const { resumeJson, setResumeJson, setAnalysisResult } = useSession();
+  const queryClient = useQueryClient();
 
   const [isDragging, setIsDragging] = useState(false);
   const [parseStage, setParseStage] = useState<string | null>(null);
@@ -45,6 +57,21 @@ export default function InitializeWorkspace() {
   async function handleFile(file: File) {
     setParseError(null);
     setFileName(file.name);
+
+    // Check if we already parsed an identical file within the last hour.
+    // This avoids a round-trip to Gemini for repeat uploads of the same resume.
+    const hash = await computeFileHash(file);
+    const cacheKey = ["resume", hash];
+    const cacheState = queryClient.getQueryState<Record<string, unknown>>(cacheKey);
+    if (
+      cacheState?.data &&
+      cacheState.dataUpdatedAt &&
+      Date.now() - cacheState.dataUpdatedAt < RESUME_CACHE_TTL
+    ) {
+      setResumeJson(cacheState.data);
+      return;
+    }
+
     setParseStage("extracting");
 
     const formData = new FormData();
@@ -96,6 +123,7 @@ export default function InitializeWorkspace() {
             setParseStage(payload["stage"] as string);
           } else if (eventName === "result") {
             setParseStage(null);
+            queryClient.setQueryData(["resume", hash], payload);
             setResumeJson(payload);
             return;
           } else if (eventName === "error") {

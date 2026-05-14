@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -10,6 +10,7 @@ import { CompetencyRadar } from "@/components/ui/CompetencyRadar";
 import RoadmapView from "@/components/RoadmapView";
 import { OptimizedResumeModal } from "@/components/OptimizedResumeModal";
 import { createClient } from "@/lib/supabase/client";
+import { useOptimizedResume, useSetOptimizedResume } from "@/hooks/useOptimizedResume";
 
 interface Competency { name: string; score?: number; requiredScore?: number; preferredScore?: number }
 interface Finding { text: string; priority: "high" | "medium" | "low" }
@@ -154,28 +155,12 @@ export default function SavedPlanClient({
   const [plan, setPlan] = useState(careerPlan);
   const [chatOpen, setChatOpen] = useState(false);
   const [isOptimizeLoading, setIsOptimizeLoading] = useState(false);
-  const [isOptimizeStatusLoading, setIsOptimizeStatusLoading] = useState(true);
-  const [isOptimizeComplete, setIsOptimizeComplete] = useState(false);
-  const [cachedOptimizedResume, setCachedOptimizedResume] = useState<Record<string, unknown> | null>(null);
   const [optimizedResume, setOptimizedResume] = useState<Record<string, unknown> | null>(null);
   const supabase = createClient();
 
-  // Load existing optimized resume on mount so the button reflects persisted state
-  useEffect(() => {
-    supabase
-      .from("optimized_resumes")
-      .select("id, resume_data, markdown, meta, locale, created_at")
-      .eq("career_plan_id", planId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setCachedOptimizedResume(data as unknown as Record<string, unknown>);
-          setIsOptimizeComplete(true);
-        }
-        setIsOptimizeStatusLoading(false);
-      });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planId]);
+  const { data: cachedOptimizedResume, isLoading: isOptimizeStatusLoading } = useOptimizedResume(planId);
+  const setOptimizedResumeCache = useSetOptimizedResume(planId);
+  const isOptimizeComplete = !!cachedOptimizedResume;
 
   const competencies = plan.gap_analysis?.competencies ?? [];
   const findings = plan.gap_analysis?.findings ?? [];
@@ -239,9 +224,8 @@ export default function SavedPlanClient({
         return;
       }
       const data = await res.json();
-      setCachedOptimizedResume(data);
+      setOptimizedResumeCache(data);
       setOptimizedResume(data);
-      setIsOptimizeComplete(true);
     } finally {
       setIsOptimizeLoading(false);
     }

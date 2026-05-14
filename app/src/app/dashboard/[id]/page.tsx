@@ -1,5 +1,7 @@
 import { notFound, redirect } from "next/navigation";
+import { dehydrate, HydrationBoundary, QueryClient } from "@tanstack/react-query";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { optimizedResumeKey } from "@/lib/query-keys";
 import SavedPlanClient from "./SavedPlanClient";
 
 interface RawStrength {
@@ -71,20 +73,41 @@ export default async function SavedPlanPage({ params }: { params: { id: string }
     redirect("/");
   }
 
-  const { data: plan, error } = await supabase
-    .from("career_plans")
-    .select(`
-      id, title, target_role, target_company, jd_text, duration_weeks, start_date, end_date,
-      gap_analyses(summary_json),
-      roadmaps (
-        summary,
-        phases_json
-      )
-    `)
-    .eq("id", params.id)
-    .eq("user_id", user.id)
-    .single();
+  // Fetch career plan + prefetch optimized resume in parallel
+  const [planResult, queryClient] = await Promise.all([
+    supabase
+      .from("career_plans")
+      .select(`
+        id, title, target_role, target_company, jd_text, duration_weeks, start_date, end_date,
+        gap_analyses(summary_json),
+        roadmaps (
+          summary,
+          phases_json
+        )
+      `)
+      .eq("id", params.id)
+      .eq("user_id", user.id)
+      .single(),
+    (async () => {
+      const qc = new QueryClient();
+      await qc.prefetchQuery({
+        queryKey: optimizedResumeKey(params.id),
+        queryFn: async () => {
+          const { data } = await supabase
+            .from("optimized_resumes")
+            .select("id, resume_data, markdown, meta, locale, created_at")
+            .eq("career_plan_id", params.id)
+            .maybeSingle();
+          return data ?? null;
+        },
+        // Never refetch — optimized resumes are immutable once created
+        staleTime: Infinity,
+      });
+      return qc;
+    })(),
+  ]);
 
+  const { data: plan, error } = planResult;
   if (error || !plan) {
     return notFound();
   }
@@ -106,5 +129,9 @@ export default async function SavedPlanPage({ params }: { params: { id: string }
     gap_analysis: deriveGapAnalysis(gapSummary),
   };
 
-  return <SavedPlanClient careerPlan={careerPlan} planId={plan.id} />;
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <SavedPlanClient careerPlan={careerPlan} planId={plan.id} />
+    </HydrationBoundary>
+  );
 }
