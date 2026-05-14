@@ -1,33 +1,42 @@
 export default function SavedPlanLoading() {
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      {/* Back link skeleton */}
+    <div className="space-y-10 pb-16 max-w-5xl">
+      {/* Back link */}
       <div className="skeleton h-4 w-32 rounded" />
 
-      {/* Title */}
-      <div className="space-y-2">
-        <div className="skeleton h-9 w-80 rounded-lg" />
-        <div className="skeleton h-4 w-52 rounded" />
+      {/* Header: title + optimize button (matches flex items-start justify-between gap-4) */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-2 flex-1 min-w-0">
+          <div className="skeleton h-9 w-64 rounded-lg" />
+          <div className="skeleton h-4 w-80 rounded" />
+        </div>
+        <div className="skeleton h-9 w-36 rounded-xl shrink-0" />
       </div>
 
-      {/* Gap analysis card */}
-      <div className="glass-card rounded-2xl p-8 space-y-6">
-        <div className="skeleton h-5 w-40 rounded" />
-        <div className="flex flex-col lg:flex-row gap-8 items-center">
-          <div className="skeleton h-48 w-48 rounded-full shrink-0" />
-          <div className="flex-1 space-y-3 w-full">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className="skeleton h-3 w-24 rounded" />
-                <div className="skeleton h-2 flex-1 rounded-full" />
-                <div className="skeleton h-3 w-8 rounded" />
-              </div>
-            ))}
-          </div>
+      {/* Gap analysis: 2-column grid (gauge + radar) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="glass-card rounded-2xl p-8 flex flex-col items-center justify-center min-h-[240px] gap-4">
+          <div className="skeleton h-48 w-48 rounded-full" />
+          <div className="skeleton h-3 w-32 rounded" />
+        </div>
+        <div className="glass-card rounded-2xl p-6 space-y-4">
+          <div className="skeleton h-4 w-28 rounded" />
+          <div className="skeleton h-52 w-52 rounded-full mx-auto" />
         </div>
       </div>
 
-      {/* Roadmap weeks skeleton */}
+      {/* Evidence-based findings (full-width) */}
+      <div className="glass-card rounded-2xl p-6 space-y-4">
+        <div className="skeleton h-4 w-44 rounded" />
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex items-start gap-3">
+            <div className="skeleton h-5 w-14 rounded-full shrink-0" />
+            <div className="skeleton h-4 flex-1 rounded" />
+          </div>
+        ))}
+      </div>
+
+      {/* Roadmap weeks */}
       <div className="space-y-4">
         {[0, 1, 2].map((i) => (
           <div key={i} className="glass-card rounded-2xl p-6 space-y-3">
