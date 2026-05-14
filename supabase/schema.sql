@@ -508,6 +508,11 @@ CREATE POLICY "optimized_resumes: owner all"
   ON optimized_resumes FOR ALL
   USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+CREATE POLICY "optimized_resumes: anon public read by id"
+  ON optimized_resumes FOR SELECT
+  TO anon
+  USING (true);
+
 -- ============================================================
 -- SECTION L: pg_cron Setup (run after schema is applied)
 -- ============================================================

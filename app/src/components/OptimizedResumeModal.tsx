@@ -66,6 +66,7 @@ interface Props {
 export function OptimizedResumeModal({ data, onClose }: Props) {
   const t = useTranslations("OptimizedResumeModal");
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [mounted, setMounted] = useState(false);
   const record = data as unknown as OptimizedResumeRecord;
   const resumeData = record.resume_data;
@@ -94,6 +95,16 @@ export function OptimizedResumeModal({ data, onClose }: Props) {
     a.download = `${slug}-optimized.md`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function handleCopyLink() {
+    if (!record.id) return;
+    const url = `${window.location.origin}/share/${record.id}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    });
   }
 
   function handleDownloadPdf() {
@@ -469,6 +480,14 @@ export function OptimizedResumeModal({ data, onClose }: Props) {
           >
             {t("download")}
           </button>
+          {record.id && (
+            <button
+              onClick={handleCopyLink}
+              className="px-4 py-2 border border-border bg-background text-foreground font-bold text-sm rounded-xl hover:bg-muted transition-all"
+            >
+              {copiedLink ? t("linkCopied") : t("copyLink")}
+            </button>
+          )}
           <button
             onClick={handleDownloadPdf}
             className="px-4 py-2 bg-gradient-to-r from-primary to-secondary text-primary-foreground font-bold text-sm rounded-xl hover:opacity-90 transition-all shadow-xl shadow-primary/20"
