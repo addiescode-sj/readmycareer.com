@@ -62,7 +62,10 @@
       "Bash(npm run *)",
       "Bash(xargs kill *)",
       "mcp__supabase__list_migrations",
-      "mcp__supabase__execute_sql"
+      "mcp__supabase__execute_sql",
+      "WebFetch(domain:geminicli.com)",
+      "Skill(ralph-loop:ralph-loop)",
+      "Skill(ralph-loop:ralph-loop:*)"
     ],
     "additionalDirectories": [
       "/tmp",

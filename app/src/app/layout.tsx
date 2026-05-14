@@ -8,6 +8,7 @@ import { SessionLayout } from "@/components/SessionLayout";
 import { AuthListener } from "@/components/AuthListener";
 import ParticleNetwork from "@/components/ui/ParticleNetwork";
 import { Toaster } from "sonner";
+import { QueryProvider } from "@/providers/QueryProvider";
 
 export const metadata: Metadata = {
   title: "readmycareer.com — AI Career Coach",
@@ -43,6 +44,7 @@ export default async function RootLayout({
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
         <NextIntlClientProvider messages={messages}>
+          <QueryProvider>
           <AuthListener />
           <ParticleNetwork />
           <Toaster position="top-center" richColors />
@@ -55,6 +57,7 @@ export default async function RootLayout({
               <SessionLayout upload={upload} goal={goal} plan={plan} chat={chat} />
             </div>
           )}
+          </QueryProvider>
         </NextIntlClientProvider>
       </body>
     </html>
