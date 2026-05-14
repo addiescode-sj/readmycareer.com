@@ -6,11 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslations } from "next-intl";
 import ReactMarkdown from "react-markdown";
 import { createClient } from "@/lib/supabase/client";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
+import { useChatMessages, useAppendChatMessages, type ChatMessage } from "@/hooks/useChatMessages";
 
 interface Props {
   planId?: string;
@@ -35,45 +31,37 @@ export function AICoachChat({
 
   const [internalOpen, setInternalOpen] = useState(false);
   const isOpen = isOpenProp !== undefined ? isOpenProp : internalOpen;
-
   const setOpen = (open: boolean) => {
     setInternalOpen(open);
     onOpenChange?.(open);
   };
 
-  const [messages, setMessages] = useState<Message[]>([]);
+  // ── Server state: persisted history, fetched as soon as planId is known ────
+  const { data: serverMessages = [], isLoading: isLoadingHistory } = useChatMessages(planId);
+  const appendMessages = useAppendChatMessages(planId);
+
+  // ── Client state: in-flight exchange ────────────────────────────────────────
+  const [pendingUser, setPendingUser] = useState<string | null>(null);
+  const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [initialized, setInitialized] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    if (!isOpen || initialized) return;
-    setInitialized(true);
+  // Combine server history + in-flight messages for display
+  const greeting: ChatMessage = { role: "assistant", content: t("greeting") };
+  const baseMessages: ChatMessage[] =
+    !isLoadingHistory && serverMessages.length === 0 ? [greeting] : serverMessages;
 
-    if (planId) {
-      supabase
-        .from("recent_chat_messages")
-        .select("role, content")
-        .eq("career_plan_id", planId)
-        .order("sequence_number", { ascending: true })
-        .then(({ data, error }) => {
-          if (!error && data && data.length > 0) {
-            setMessages(data as Message[]);
-          } else {
-            setMessages([{ role: "assistant", content: t("greeting") }]);
-          }
-        });
-    } else {
-      setMessages([{ role: "assistant", content: t("greeting") }]);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  const displayMessages: ChatMessage[] = [
+    ...baseMessages,
+    ...(pendingUser !== null ? [{ role: "user" as const, content: pendingUser }] : []),
+    ...(streamingContent !== null ? [{ role: "assistant" as const, content: streamingContent }] : []),
+  ];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [displayMessages.length, streamingContent]);
 
   useEffect(() => {
     const handleSidebarState = (e: Event) => {
@@ -93,7 +81,8 @@ export function AICoachChat({
   async function sendMessage(text: string) {
     if (!text.trim() || isLoading) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    setPendingUser(text);
+    setStreamingContent("");
     setInput("");
     setIsLoading(true);
 
@@ -111,10 +100,10 @@ export function AICoachChat({
       }
     }
 
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
+    setStreamingContent("");
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90_000);
+    let assistantText = "";
 
     try {
       const res = await fetch("/api/chat", {
@@ -137,7 +126,6 @@ export function AICoachChat({
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let assistantText = "";
       let buffer = "";
 
       while (true) {
@@ -154,16 +142,10 @@ export function AICoachChat({
             const parsed = JSON.parse(payload) as { text?: string; error?: string };
             if (parsed.text) {
               assistantText += parsed.text;
-              setMessages((prev) => [
-                ...prev.slice(0, -1),
-                { role: "assistant", content: assistantText },
-              ]);
+              setStreamingContent(assistantText);
             } else if (parsed.error) {
               assistantText = parsed.error;
-              setMessages((prev) => [
-                ...prev.slice(0, -1),
-                { role: "assistant", content: assistantText },
-              ]);
+              setStreamingContent(assistantText);
             }
           } catch { /* skip malformed SSE */ }
         }
@@ -177,14 +159,16 @@ export function AICoachChat({
           content: assistantText,
         });
       }
+
+      // Commit the completed exchange into the RQ cache
+      appendMessages(text, assistantText);
     } catch {
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        { role: "assistant", content: t("genericError") },
-      ]);
+      setStreamingContent(t("genericError"));
     } finally {
       clearTimeout(timeoutId);
       setIsLoading(false);
+      setPendingUser(null);
+      setStreamingContent(null);
       textareaRef.current?.focus();
     }
   }
@@ -222,38 +206,44 @@ export function AICoachChat({
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-              {messages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[82%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed ${
-                      msg.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-br-sm"
-                        : "bg-muted text-foreground rounded-bl-sm"
-                    }`}
-                  >
-                    {msg.role === "assistant" ? (
-                      msg.content ? (
-                        <div className="prose prose-sm max-w-none [&_p]:mb-1 [&_ul]:mb-1">
-                          <ReactMarkdown
-                            skipHtml={true}
-                            allowedElements={["p", "strong", "em", "ul", "ol", "li", "code"]}
-                          >
-                            {msg.content}
-                          </ReactMarkdown>
-                        </div>
-                      ) : (
-                        <span className="inline-flex gap-1">
-                          <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                          <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                          <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce" />
-                        </span>
-                      )
-                    ) : (
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
-                    )}
-                  </div>
+              {isLoadingHistory && serverMessages.length === 0 ? (
+                <div className="flex justify-center pt-8">
+                  <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                 </div>
-              ))}
+              ) : (
+                displayMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className={`max-w-[82%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-primary text-primary-foreground rounded-br-sm"
+                          : "bg-muted text-foreground rounded-bl-sm"
+                      }`}
+                    >
+                      {msg.role === "assistant" ? (
+                        msg.content ? (
+                          <div className="prose prose-sm max-w-none [&_p]:mb-1 [&_ul]:mb-1">
+                            <ReactMarkdown
+                              skipHtml={true}
+                              allowedElements={["p", "strong", "em", "ul", "ol", "li", "code"]}
+                            >
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          <span className="inline-flex gap-1">
+                            <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                            <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                            <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce" />
+                          </span>
+                        )
+                      ) : (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
               <div ref={bottomRef} />
             </div>
 

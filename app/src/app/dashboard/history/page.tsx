@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import { dehydrate, HydrationBoundary, QueryClient } from "@tanstack/react-query";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { chatMessagesKey } from "@/lib/query-keys";
 import { ChatHistoryClient } from "@/components/dashboard/ChatHistoryClient";
 
 export default async function HistoryPage() {
@@ -16,19 +18,35 @@ export default async function HistoryPage() {
     .order("created_at", { ascending: false })
     .limit(10);
 
-  const safeePlans = (plans ?? []).map((p) => ({
+  const safePlans = (plans ?? []).map((p) => ({
     ...p,
     gap_analyses: Array.isArray(p.gap_analyses)
       ? (p.gap_analyses[0] ?? null)
       : p.gap_analyses,
   }));
 
-  const initialPlanId = safeePlans[0]?.id ?? null;
+  const firstPlanId = safePlans[0]?.id ?? null;
+
+  // Prefetch the first plan's chat history so it renders without a loading flash
+  const queryClient = new QueryClient();
+  if (firstPlanId) {
+    await queryClient.prefetchQuery({
+      queryKey: chatMessagesKey(firstPlanId),
+      queryFn: async () => {
+        const { data } = await supabase
+          .from("recent_chat_messages")
+          .select("role, content")
+          .eq("career_plan_id", firstPlanId)
+          .order("sequence_number", { ascending: true });
+        return data ?? [];
+      },
+      staleTime: 5 * 60 * 1000,
+    });
+  }
 
   return (
-    <ChatHistoryClient
-      plans={safeePlans}
-      initialPlanId={initialPlanId}
-    />
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <ChatHistoryClient plans={safePlans} initialPlanId={firstPlanId} />
+    </HydrationBoundary>
   );
 }

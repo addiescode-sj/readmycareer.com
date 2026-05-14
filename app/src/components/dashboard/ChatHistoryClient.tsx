@@ -7,11 +7,7 @@ import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { createClient } from "@/lib/supabase/client";
 import { Send, MessageSquare, ChevronRight, ChevronDown } from "lucide-react";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
+import { useChatMessages, useAppendChatMessages, type ChatMessage } from "@/hooks/useChatMessages";
 
 interface Plan {
   id: string;
@@ -107,42 +103,46 @@ function ChatPanel({ plan }: { plan: Plan | null }) {
   const t = useTranslations("ChatInterface");
   const tHistory = useTranslations("ConversationHistory");
   const supabase = createClient();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // ── Server state: persisted chat history ────────────────────────────────────
+  const { data: serverMessages = [], isLoading: isLoadingHistory } = useChatMessages(plan?.id);
+  const appendMessages = useAppendChatMessages(plan?.id);
+
+  // ── Client state: in-flight exchange (not yet confirmed by server) ──────────
+  const [pendingUser, setPendingUser] = useState<string | null>(null);
+  const [streamingContent, setStreamingContent] = useState<string | null>(null);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Reset pending state whenever the selected plan changes
   useEffect(() => {
-    if (!plan) return;
-    setMessages([]);
-
-    async function fetchHistory() {
-      const { data, error } = await supabase
-        .from("recent_chat_messages")
-        .select("role, content")
-        .eq("career_plan_id", plan!.id)
-        .order("sequence_number", { ascending: true });
-
-      if (!error && data && data.length > 0) {
-        setMessages(data as Message[]);
-      } else {
-        setMessages([{ role: "assistant", content: t("greeting") }]);
-      }
-    }
-    fetchHistory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setPendingUser(null);
+    setStreamingContent(null);
+    setInput("");
   }, [plan?.id]);
+
+  // Combine server history + in-flight messages for display
+  const greeting: ChatMessage = { role: "assistant", content: t("greeting") };
+  const baseMessages: ChatMessage[] =
+    !isLoadingHistory && serverMessages.length === 0 ? [greeting] : serverMessages;
+
+  const displayMessages: ChatMessage[] = [
+    ...baseMessages,
+    ...(pendingUser !== null ? [{ role: "user" as const, content: pendingUser }] : []),
+    ...(streamingContent !== null ? [{ role: "assistant" as const, content: streamingContent }] : []),
+  ];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [displayMessages.length, streamingContent]);
 
   async function sendMessage(text: string) {
     if (!text.trim() || isLoading || !plan) return;
 
-    const userMsg: Message = { role: "user", content: text };
-    setMessages((prev) => [...prev, userMsg]);
+    setPendingUser(text);
+    setStreamingContent("");
     setInput("");
     setIsLoading(true);
 
@@ -158,14 +158,13 @@ function ChatPanel({ plan }: { plan: Plan | null }) {
       });
     }
 
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
     const gapRaw = plan.gap_analyses
       ? (Array.isArray(plan.gap_analyses) ? plan.gap_analyses[0] : plan.gap_analyses)
       : null;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90_000);
+    let assistantText = "";
 
     try {
       const res = await fetch("/api/chat", {
@@ -188,7 +187,6 @@ function ChatPanel({ plan }: { plan: Plan | null }) {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let assistantText = "";
       let buffer = "";
 
       while (true) {
@@ -205,10 +203,7 @@ function ChatPanel({ plan }: { plan: Plan | null }) {
             const parsed = JSON.parse(payload) as { text?: string };
             if (parsed.text) {
               assistantText += parsed.text;
-              setMessages((prev) => [
-                ...prev.slice(0, -1),
-                { role: "assistant", content: assistantText },
-              ]);
+              setStreamingContent(assistantText);
             }
           } catch { /* skip */ }
         }
@@ -222,14 +217,16 @@ function ChatPanel({ plan }: { plan: Plan | null }) {
           content: assistantText,
         });
       }
+
+      // Commit the completed exchange into the RQ cache
+      appendMessages(text, assistantText);
     } catch {
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        { role: "assistant", content: t("genericError") },
-      ]);
+      setStreamingContent(t("genericError"));
     } finally {
       clearTimeout(timeoutId);
       setIsLoading(false);
+      setPendingUser(null);
+      setStreamingContent(null);
       textareaRef.current?.focus();
     }
   }
@@ -255,50 +252,56 @@ function ChatPanel({ plan }: { plan: Plan | null }) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-        {messages.map((msg, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-            className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}
-          >
-            <div
-              className={cn(
-                "max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground rounded-br-sm"
-                  : "bg-muted text-foreground rounded-bl-sm"
-              )}
+        {isLoadingHistory && serverMessages.length === 0 ? (
+          <div className="flex justify-center pt-8">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          </div>
+        ) : (
+          displayMessages.map((msg, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+              className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}
             >
-              {msg.role === "assistant" ? (
-                msg.content ? (
-                  <div className="prose prose-sm max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_li]:mb-1">
-                    <ReactMarkdown
-                      skipHtml={true}
-                      allowedElements={["p", "strong", "em", "ul", "ol", "li", "code", "pre", "blockquote", "h3"]}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
-                  </div>
+              <div
+                className={cn(
+                  "max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground rounded-br-sm"
+                    : "bg-muted text-foreground rounded-bl-sm"
+                )}
+              >
+                {msg.role === "assistant" ? (
+                  msg.content ? (
+                    <div className="prose prose-sm max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_li]:mb-1">
+                      <ReactMarkdown
+                        skipHtml={true}
+                        allowedElements={["p", "strong", "em", "ul", "ol", "li", "code", "pre", "blockquote", "h3"]}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <span className="inline-flex gap-1">
+                      <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                      <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                      <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" />
+                    </span>
+                  )
                 ) : (
-                  <span className="inline-flex gap-1">
-                    <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" />
-                  </span>
-                )
-              ) : (
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-              )}
-            </div>
-          </motion.div>
-        ))}
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                )}
+              </div>
+            </motion.div>
+          ))
+        )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Suggested questions (first load) */}
-      {messages.length <= 1 && (
+      {/* Suggested questions (first load, no conversation yet) */}
+      {displayMessages.length <= 1 && (
         <div className="px-5 pb-3 flex flex-wrap gap-2">
           {([
             t("questions.q1"),
