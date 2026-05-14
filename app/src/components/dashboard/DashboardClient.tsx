@@ -3,13 +3,20 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { SignOutButton } from "./SignOutButton";
 import { useTranslations, useLocale } from "next-intl";
 
 import { CompetencyRadar } from "@/components/ui/CompetencyRadar";
 import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  careerPlansKey,
+  useCareerPlans,
+  useDeleteCareerPlan,
+  useUpdateCareerPlanTitle,
+  type CareerPlanRow,
+} from "@/hooks/useCareerPlans";
 
 interface GapAnalysis {
   competencies: Array<{ name: string; requiredScore: number; preferredScore: number }>;
@@ -89,25 +96,6 @@ interface WeekProgress {
   todos: TodoProgress[];
 }
 
-interface Roadmap {
-  summary: string | null;
-  week_count: number | null;
-  phases_json: unknown;
-}
-
-interface CareerPlan {
-  id: string;
-  title: string | null;
-  target_role: string;
-  target_company: string;
-  status: "active" | "completed" | "archived";
-  start_date: string | null;
-  duration_weeks: number | null;
-  created_at: string;
-  gap_analyses: Array<{ summary_json: unknown }> | null;
-  roadmaps: Roadmap | Roadmap[] | null;
-}
-
 interface Profile {
   display_name: string | null;
   avatar_url: string | null;
@@ -115,14 +103,6 @@ interface Profile {
 
 interface Props {
   profile: Profile | null;
-  initialPlans: CareerPlan[];
-}
-
-interface WeekEntry {
-  weekStart: string;
-  weekEnd: string;
-  total: number;
-  completed: number;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -140,12 +120,6 @@ function formatDate(dateStr: string | null, locale: string): string {
   }).format(new Date(dateStr));
 }
 
-function formatShortDate(dateStr: string): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
 function computeProgress(phases: unknown): { total: number; completed: number; pct: number } {
   if (!Array.isArray(phases)) return { total: 0, completed: 0, pct: 0 };
   let total = 0;
@@ -160,69 +134,34 @@ function computeProgress(phases: unknown): { total: number; completed: number; p
   return { total, completed, pct };
 }
 
-function buildWeeklyData(plans: CareerPlan[]): WeekEntry[] {
-  const map = new Map<string, WeekEntry>();
-
-  for (const plan of plans) {
-    const roadmap = Array.isArray(plan.roadmaps) ? plan.roadmaps[0] : plan.roadmaps;
-    const phases = roadmap?.phases_json;
-    if (!Array.isArray(phases)) continue;
-
-    for (const week of phases as WeekProgress[]) {
-      const key = week.date_range?.start ?? `w${week.week_number}`;
-      const entry = map.get(key) ?? {
-        weekStart: week.date_range?.start ?? key,
-        weekEnd: week.date_range?.end ?? "",
-        total: 0,
-        completed: 0,
-      };
-      for (const todo of (week.todos ?? [])) {
-        entry.total++;
-        if (String(todo.done) === "true" || todo.done === true) entry.completed++;
-      }
-      map.set(key, entry);
-    }
-  }
-
-  return Array.from(map.values()).sort((a, b) => a.weekStart.localeCompare(b.weekStart));
-}
-
-function progressColorClasses(pct: number): { card: string; bar: string; text: string } {
-  if (pct === 0) return { card: "bg-card border-border", bar: "bg-muted", text: "text-muted-foreground" };
-  if (pct < 50) return { card: "bg-card border-border", bar: "bg-primary/40", text: "text-primary" };
-  if (pct < 100) return { card: "bg-card border-border", bar: "bg-primary", text: "text-primary" };
-  return { card: "bg-secondary/5 border-secondary/30", bar: "bg-secondary", text: "text-secondary" };
-}
-
-
-export function DashboardClient({ profile, initialPlans }: Props) {
+export function DashboardClient({ profile }: Props) {
   const t = useTranslations("Dashboard");
   const locale = useLocale();
-  const [plans, setPlans] = useState<CareerPlan[]>(initialPlans);
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  // ── Server state (React Query) ──────────────────────────────────────────────
+  const { data: plans = [] } = useCareerPlans();
+  const deletePlan = useDeleteCareerPlan();
+  const updateTitle = useUpdateCareerPlanTitle();
+
+  // ── Client state (UI only) ──────────────────────────────────────────────────
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
-  const [savingTitle, setSavingTitle] = useState(false);
-  const supabase = createClient();
-  const router = useRouter();
 
-  // Sync state when props change (e.g. after router.refresh())
-  useEffect(() => {
-    setPlans(initialPlans);
-  }, [initialPlans]);
-
-  // Refresh data when page is restored from bfcache (browser back/forward)
+  // Refresh plans when page is restored from bfcache (browser back/forward)
   useEffect(() => {
     function handlePageShow(e: PageTransitionEvent) {
       if (e.persisted) {
-        router.refresh();
+        queryClient.invalidateQueries({ queryKey: careerPlansKey() });
       }
     }
     window.addEventListener("pageshow", handlePageShow);
     return () => window.removeEventListener("pageshow", handlePageShow);
-  }, [router]);
+  }, [queryClient]);
 
+  // Save any plan that was created during the onboarding flow but not yet persisted
   useEffect(() => {
     async function syncUnsavedPlan() {
       if (sessionStorage.getItem("rmc_plan_saved") === "true") return;
@@ -250,7 +189,7 @@ export function DashboardClient({ profile, initialPlans }: Props) {
         });
 
         if (res.ok) {
-          router.refresh();
+          queryClient.invalidateQueries({ queryKey: careerPlansKey() });
         } else {
           sessionStorage.removeItem("rmc_plan_saved");
         }
@@ -261,9 +200,9 @@ export function DashboardClient({ profile, initialPlans }: Props) {
     }
 
     syncUnsavedPlan();
-  }, [router]);
+  }, [queryClient]);
 
-  function startEditTitle(plan: CareerPlan, e: React.MouseEvent) {
+  function startEditTitle(plan: CareerPlanRow, e: React.MouseEvent) {
     e.stopPropagation();
     setEditingPlanId(plan.id);
     setEditingTitle(plan.title ?? plan.target_role);
@@ -272,17 +211,7 @@ export function DashboardClient({ profile, initialPlans }: Props) {
   async function handleSaveTitle(planId: string) {
     const trimmed = editingTitle.trim();
     if (!trimmed) return;
-    setSavingTitle(true);
-    const { error } = await supabase
-      .from("career_plans")
-      .update({ title: trimmed })
-      .eq("id", planId);
-    if (!error) {
-      setPlans((prev) =>
-        prev.map((p) => (p.id === planId ? { ...p, title: trimmed } : p))
-      );
-    }
-    setSavingTitle(false);
+    await updateTitle.mutateAsync({ planId, title: trimmed });
     setEditingPlanId(null);
   }
 
@@ -292,18 +221,8 @@ export function DashboardClient({ profile, initialPlans }: Props) {
   }
 
   async function handleDelete(planId: string) {
-    setDeleting(true);
-    const { error } = await supabase
-      .from("career_plans")
-      .delete()
-      .eq("id", planId);
-
-    if (!error) {
-      setPlans((prev) => prev.filter((p) => p.id !== planId));
-      router.refresh();
-    }
+    await deletePlan.mutateAsync(planId);
     setConfirmDeleteId(null);
-    setDeleting(false);
   }
 
   function handleNewPlan(e: React.MouseEvent) {
@@ -517,10 +436,10 @@ export function DashboardClient({ profile, initialPlans }: Props) {
               </button>
               <button
                 onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}
-                disabled={deleting}
+                disabled={deletePlan.isPending}
                 className="py-4 rounded-2xl bg-destructive text-destructive-foreground font-bold text-sm hover:opacity-90 transition-all shadow-xl shadow-destructive/20"
               >
-                {deleting ? t("deleting") : t("confirmDelete")}
+                {deletePlan.isPending ? t("deleting") : t("confirmDelete")}
               </button>
             </div>
           </div>
