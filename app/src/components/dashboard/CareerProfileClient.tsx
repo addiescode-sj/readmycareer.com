@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
-import { CompetencyRadar } from "@/components/ui/CompetencyRadar";
+import { CompetencyRadar } from "@/components/ui/CompetencyRadarLazy";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { createClient } from "@/lib/supabase/client";
 

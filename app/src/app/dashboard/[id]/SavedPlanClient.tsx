@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { AICoachChat } from "@/components/ui/AICoachChat";
-import { CompetencyRadar } from "@/components/ui/CompetencyRadar";
+import { CompetencyRadar } from "@/components/ui/CompetencyRadarLazy";
 import RoadmapView from "@/components/RoadmapView";
 import { OptimizedResumeModal } from "@/components/OptimizedResumeModal";
 import { createClient } from "@/lib/supabase/client";

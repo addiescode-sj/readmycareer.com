@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { SignOutButton } from "./SignOutButton";
 import { useTranslations, useLocale } from "next-intl";
 
-import { CompetencyRadar } from "@/components/ui/CompetencyRadar";
+import { CompetencyRadar } from "@/components/ui/CompetencyRadarLazy";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
   careerPlansKey,

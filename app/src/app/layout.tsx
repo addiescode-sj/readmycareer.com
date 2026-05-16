@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { headers } from "next/headers";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import { SessionLayout } from "@/components/SessionLayout";
 import { AuthListener } from "@/components/AuthListener";
-import ParticleNetwork from "@/components/ui/ParticleNetwork";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/providers/QueryProvider";
+
+// Canvas-based particle animation: only mounted on the landing page. Dynamic-import keeps it out
+// of the dashboard / session-flow / share-route bundles, dropping ~10KB + Canvas init from those.
+const ParticleNetwork = dynamic(() => import("@/components/ui/ParticleNetwork"), {
+  ssr: false,
+});
 
 export const metadata: Metadata = {
   title: "readmycareer.com — AI Career Coach",
@@ -46,7 +52,7 @@ export default async function RootLayout({
         <NextIntlClientProvider messages={messages}>
           <QueryProvider>
           <AuthListener />
-          <ParticleNetwork />
+          {isLanding && <ParticleNetwork />}
           <Toaster position="top-center" richColors />
           {isDashboard || isLanding || isShare ? (
             <div className="relative z-10">
