@@ -1,7 +1,5 @@
 import { NextRequest } from "next/server";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { resolve } from "path";
+import { callMcpTool } from "@readmycareer/agents/mcp-client";
 import { z } from "zod";
 
 const AnalyzeSchema = z.object({
@@ -28,51 +26,17 @@ function detectLocale(acceptLanguage: string | null): "ko" | "en" {
   return "ko";
 }
 
-const KB_SKILL_PATH = resolve(
-  process.cwd(),
-  "../mcp-skills/career-knowledge-base/dist/index.js"
-);
-
-// Searches the career knowledge base MCP.
+// Searches the career knowledge base MCP via the pooled client (no per-call subprocess spawn).
 // Default filter is "jd"; pass { doc_type: "reference" } for career trend/industry documents.
 async function searchJdFromMcp(
   query: string,
   filter: { doc_type: "jd" | "reference" } = { doc_type: "jd" }
-) {
-  // Pass only the env vars required by the career-knowledge-base MCP
-  const env: Record<string, string> = {
-    PATH: process.env.PATH ?? "",
-    NODE_ENV: process.env.NODE_ENV ?? "production",
-    ...(process.env.GOOGLE_API_KEY && { GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }),
-    ...(process.env.GOOGLE_GENAI_API_KEY && { GOOGLE_GENAI_API_KEY: process.env.GOOGLE_GENAI_API_KEY }),
-    ...(process.env.GEMINI_API_KEY && { GEMINI_API_KEY: process.env.GEMINI_API_KEY }),
-    ...(process.env.PINECONE_API_KEY && { PINECONE_API_KEY: process.env.PINECONE_API_KEY }),
-    ...(process.env.PINECONE_INDEX_NAME && { PINECONE_INDEX_NAME: process.env.PINECONE_INDEX_NAME }),
-  };
-
-  const transport = new StdioClientTransport({
-    command: "node",
-    args: [KB_SKILL_PATH],
-    env,
-  });
-  const client = new Client({ name: "next-api", version: "1.0.0" });
-  await client.connect(transport);
-
-  const result = await client.callTool({
-    name: "search",
-    arguments: { query, top_k: 5, filter },
-  });
-
-  await client.close();
-
-  const contentArr = result.content as Array<{ type: string; text?: string }>;
-  const text = contentArr.find((c) => c.type === "text")?.text ?? "{}";
-
-  if (result.isError) {
-    throw new Error(`MCP Error: ${text}`);
-  }
-
-  const parsed = JSON.parse(text) as { results?: unknown[] };
+): Promise<unknown[]> {
+  const parsed = (await callMcpTool("career-knowledge-base", "search", {
+    query,
+    top_k: 5,
+    filter,
+  })) as { results?: unknown[] };
   return parsed.results ?? [];
 }
 
@@ -132,31 +96,36 @@ export async function POST(req: NextRequest) {
         controller.enqueue(sseChunk(event, data));
 
       try {
-        // 1. Fetch career trend reference documents from Vector DB (supplementary context for planner).
-        //    JD gap analysis now uses the raw jdText provided directly by the user.
+        // 1. Kick off reference search + orchestrator import in PARALLEL with the rest of
+        //    the pipeline. Reference data is only consumed by the planner (step 2), so its
+        //    ~500ms latency is fully masked by the gap-analysis Gemini call.
         send("progress", { step: "reference_search" });
-        let referenceResults: any[] = [];
 
-        try {
-          referenceResults = await searchJdFromMcp(
-            `${targetRole} ${targetCompany}`.trim(),
-            { doc_type: "reference" }
-          );
-        } catch (mcpErr: any) {
-          console.warn("[/api/analyze] Reference search failed — proceeding without supplementary context:", mcpErr?.message ?? mcpErr);
-          referenceResults = [];
-        }
+        const referenceResultsPromise = searchJdFromMcp(
+          `${targetRole} ${targetCompany}`.trim(),
+          { doc_type: "reference" }
+        )
+          .then((r) => {
+            send("progress", { step: "reference_search_done" });
+            return r as unknown[];
+          })
+          .catch((mcpErr: any) => {
+            console.warn(
+              "[/api/analyze] Reference search failed — proceeding without supplementary context:",
+              mcpErr?.message ?? mcpErr
+            );
+            send("progress", { step: "reference_search_done" });
+            return [] as unknown[];
+          });
 
-        send("progress", { step: "reference_search_done" });
-
-        // 2. Run agent pipeline (gap analysis uses jdText directly; planner uses referenceResults)
+        // 2. Run agent pipeline (gap analysis uses jdText directly; planner awaits referenceResults)
         const { runCareerAnalysis } = await import(
           "@readmycareer/agents/orchestrator"
         ) as {
           runCareerAnalysis: (
             resumeJson: unknown,
             jdText: string,
-            referenceResults: unknown[],
+            referenceResults: unknown[] | Promise<unknown[]>,
             durationWeeks: number,
             startDate: string,
             targetRole: string,
@@ -169,7 +138,7 @@ export async function POST(req: NextRequest) {
         const careerPlan = await runCareerAnalysis(
           resumeJson,
           jdText,
-          referenceResults,
+          referenceResultsPromise,
           durationWeeks,
           startDate,
           targetRole,

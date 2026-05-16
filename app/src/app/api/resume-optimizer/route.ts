@@ -30,14 +30,42 @@ export async function POST(req: NextRequest) {
   const { career_plan_id } = body;
   const locale = detectLocale(req);
 
-  // ── Idempotency: return existing result if present and has projects data ──
-  const { data: existing } = await supabase
-    .from("optimized_resumes")
-    .select("id, resume_data, markdown, meta, locale, created_at")
-    .eq("career_plan_id", career_plan_id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // ── Fetch all 4 sources in parallel (independent reads — was 4 sequential round trips). ──
+  // Idempotency check still short-circuits below; we pay the (small) cost of the other 3
+  // reads only on cache miss, but since they're concurrent they finish within the slowest one.
+  const [
+    { data: existing },
+    { data: plan, error: planError },
+    { data: roadmapRow },
+    { data: gapRow },
+  ] = await Promise.all([
+    supabase
+      .from("optimized_resumes")
+      .select("id, resume_data, markdown, meta, locale, created_at")
+      .eq("career_plan_id", career_plan_id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("career_plans")
+      .select("id, target_role, target_company, jd_text, resume_json")
+      .eq("id", career_plan_id)
+      .eq("user_id", user.id)
+      .single(),
+    supabase
+      .from("roadmaps")
+      .select("phases_json")
+      .eq("career_plan_id", career_plan_id)
+      .eq("user_id", user.id)
+      .single(),
+    supabase
+      .from("gap_analyses")
+      .select("summary_json")
+      .eq("career_plan_id", career_plan_id)
+      .eq("user_id", user.id)
+      .single(),
+  ]);
 
+  // ── Idempotency: return existing result if present and has projects data ──
   const existingHasProjects =
     existing &&
     Array.isArray((existing.resume_data as Record<string, unknown>)?.projects);
@@ -46,26 +74,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(existing);
   }
 
-  // ── Load career plan (verify ownership) ──────────────────────────────────
-  const { data: plan, error: planError } = await supabase
-    .from("career_plans")
-    .select("id, target_role, target_company, jd_text, resume_json")
-    .eq("id", career_plan_id)
-    .eq("user_id", user.id)
-    .single();
-
+  // ── Verify career plan ownership ─────────────────────────────────────────
   if (planError || !plan) {
     return NextResponse.json({ error: "Career plan not found" }, { status: 404 });
   }
 
   // ── Load todos from roadmaps.phases_json (source of truth for completion) ──
-  const { data: roadmapRow } = await supabase
-    .from("roadmaps")
-    .select("phases_json")
-    .eq("career_plan_id", career_plan_id)
-    .eq("user_id", user.id)
-    .single();
-
   const allTodos: TodoItem[] = ((roadmapRow?.phases_json as Array<{ todos?: TodoItem[] }>) ?? [])
     .flatMap(phase => phase.todos ?? []);
 
@@ -78,14 +92,6 @@ export async function POST(req: NextRequest) {
   }
 
   const completedTodos = allTodos.filter(t => t.done || String(t.done) === "true");
-
-  // ── Load gap analysis ─────────────────────────────────────────────────────
-  const { data: gapRow } = await supabase
-    .from("gap_analyses")
-    .select("summary_json")
-    .eq("career_plan_id", career_plan_id)
-    .eq("user_id", user.id)
-    .single();
 
   if (!gapRow?.summary_json) {
     return NextResponse.json({ error: "Gap analysis not found" }, { status: 404 });

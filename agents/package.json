@@ -10,7 +10,8 @@
     "./chat-qna": "./dist/chat-qna/index.js",
     "./resume-optimizer": "./dist/resume-optimizer/index.js",
     "./orchestrator": "./dist/orchestrator.js",
-    "./types": "./dist/types.js"
+    "./types": "./dist/types.js",
+    "./mcp-client": "./dist/lib/mcp-client.js"
   },
   "scripts": {
     "build": "tsc",
