@@ -38,6 +38,9 @@ const MAX_QUALITY_RETRIES = 2;
 /** Max retry attempts for API 429/5xx errors */
 const MAX_API_RETRIES = 3;
 
+/** Overall wall-clock timeout per Gemini generateContent call (ms). Guards against hung connections. */
+const GEMINI_CALL_TIMEOUT_MS = 30_000;
+
 /** Context cache TTL in seconds. Reuses the cache for re-analysis requests with the same resume. */
 const CACHE_TTL_SECONDS = 3600; // 1 hour
 
@@ -50,6 +53,8 @@ const CACHE_FALLBACK_ON_ERROR = true;
 // Avoids re-billing input tokens when the same resume is re-analyzed.
 
 const cacheRegistry = new Map<string, { cacheName: string; expiresAt: number }>();
+// In-flight cache creations (deduplicates concurrent createCache calls for the same key)
+const inFlightCacheCreations = new Map<string, Promise<string | null>>();
 
 function hashResume(systemInstruction: string, resumeJson: unknown): string {
   return createHash("sha256")
@@ -64,6 +69,11 @@ async function getOrCreateResumeCache(
   resumeJson: unknown
 ): Promise<string | null> {
   const key = hashResume(systemInstruction, resumeJson);
+
+  // Deduplicate concurrent creations for the same key — without this, the two
+  // parallel cache warm-ups in runCareerAnalysis would both create caches.
+  const inFlight = inFlightCacheCreations.get(key);
+  if (inFlight) return inFlight;
   const now = Date.now();
   const cached = cacheRegistry.get(key);
 
@@ -72,6 +82,7 @@ async function getOrCreateResumeCache(
     return cached.cacheName;
   }
 
+  const creation = (async () => {
   try {
     const cacheManager = new GoogleAICacheManager(apiKey);
     const cache = await cacheManager.create({
@@ -108,6 +119,14 @@ async function getOrCreateResumeCache(
       return null;
     }
     throw err;
+  }
+  })();
+
+  inFlightCacheCreations.set(key, creation);
+  try {
+    return await creation;
+  } finally {
+    inFlightCacheCreations.delete(key);
   }
 }
 
@@ -149,34 +168,39 @@ async function callGemini(opts: CallGeminiOptions): Promise<string | null> {
     try {
       let result: any;
 
-      if (cachedContentName) {
-        // With a cache, systemInstruction is included in the cache and can be omitted
-        const model = genai.getGenerativeModel({ model: MODEL_NAME });
-        result = await model.generateContent({
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          cachedContent: cachedContentName,
-          generationConfig: {
-            responseMimeType: "application/json",
-            maxOutputTokens,
-            temperature,
-            topP,
-          },
-        } as any);
-      } else {
-        const model = genai.getGenerativeModel({
-          model: MODEL_NAME,
-          systemInstruction,
-        });
-        result = await model.generateContent({
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            maxOutputTokens,
-            temperature,
-            topP,
-          },
-        });
-      }
+      const generationConfig = {
+        responseMimeType: "application/json",
+        maxOutputTokens,
+        temperature,
+        topP,
+      };
+
+      const generate = cachedContentName
+        ? genai
+            .getGenerativeModel({ model: MODEL_NAME })
+            .generateContent({
+              contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+              cachedContent: cachedContentName,
+              generationConfig,
+            } as any)
+        : genai
+            .getGenerativeModel({ model: MODEL_NAME, systemInstruction })
+            .generateContent({
+              contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+              generationConfig,
+            });
+
+      // Wall-clock timeout — protects against hung connections that would otherwise
+      // block the SSE stream until the client disconnects.
+      result = await Promise.race([
+        generate,
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Gemini call exceeded ${GEMINI_CALL_TIMEOUT_MS}ms`)),
+            GEMINI_CALL_TIMEOUT_MS
+          )
+        ),
+      ]);
 
       const text = result.response.text();
       const usage = result.response.usageMetadata;
@@ -437,7 +461,10 @@ function normalizePlan(
 export async function runCareerAnalysis(
   resumeJson: ResumeJson,
   jdText: string,
-  referenceResults: JdSearchResult[],
+  // Accepts either resolved results or a pending Promise. When a Promise is passed, the
+  // reference search runs in parallel with gap analysis and is awaited only when the
+  // planner needs it — overlapping I/O with the longer gap-analysis Gemini call.
+  referenceResults: JdSearchResult[] | Promise<JdSearchResult[]>,
   durationWeeks: number,
   startDate: string,
   targetRole: string,
@@ -455,14 +482,21 @@ export async function runCareerAnalysis(
       ? "⚠️ OUTPUT LANGUAGE REQUIREMENT: You MUST write ALL natural-language text fields (rationale, summary, evidence, theme, milestone, todo titles/descriptions) in English regardless of the language of the Job Description or resume."
       : "⚠️ 출력 언어 요구사항: JD나 이력서의 언어에 관계없이, 모든 자연어 텍스트 필드(rationale, summary, evidence, theme, milestone, todo 제목/설명)를 반드시 한국어로 작성하세요.";
 
-  // ── Step 0: Prepare resume cache ─────────────────────────────────────────
+  // ── Step 0: Prepare resume caches in parallel ────────────────────────────
   // Strip personal contact info — not needed for analysis, reduces token usage.
   const resumeForAnalysis = omitPersonal(resumeJson);
   // Build locale-aware gap analyzer instruction so the language requirement is in the system
   // instruction itself — models follow system-instruction examples more strongly than user-prompt directives.
   const gapInstruction = getGapAnalyzerInstruction(locale ?? "ko");
   onProgress?.("cache");
-  const gapCacheName = await getOrCreateResumeCache(apiKey, gapInstruction, resumeForAnalysis);
+
+  // Warm both caches concurrently. The planner cache used to be created lazily right before
+  // step 2, blocking the planner on a cold cache create (~300ms). Doing both upfront overlaps
+  // their cost with each other and keeps step 2 hot.
+  const [gapCacheName, planCacheName] = await Promise.all([
+    getOrCreateResumeCache(apiKey, gapInstruction, resumeForAnalysis),
+    getOrCreateResumeCache(apiKey, PLANNER_INSTRUCTION, resumeForAnalysis),
+  ]);
 
   // ── Step 1: Gap analysis (with quality gate) ─────────────────────────────
   // Uses the user-provided raw JD text directly for precise gap identification.
@@ -531,8 +565,16 @@ ${retryFeedback}
   onProgress?.("planning");
   console.log("[ORCHESTRATOR] Step 2: Career Planning started...");
 
-  // Reuse resume cache for plan generation (maximize savings for same resume + different goal)
-  const planCacheName = await getOrCreateResumeCache(apiKey, PLANNER_INSTRUCTION, resumeForAnalysis);
+  // planCacheName is already warmed in parallel at step 0 — no extra round-trip here.
+
+  // If the caller passed a pending reference-search Promise, await it now. Reference search
+  // was kicked off before gap analysis so its latency is masked by the gap-analysis Gemini call.
+  const resolvedReferenceResults: JdSearchResult[] = Array.isArray(referenceResults)
+    ? referenceResults
+    : await referenceResults.catch((err) => {
+        console.warn("[ORCHESTRATOR] Reference search failed — proceeding without context:", err?.message ?? err);
+        return [] as JdSearchResult[];
+      });
 
   const existingProjects = resumeForAnalysis.projects ?? [];
   const existingProjectsSection =
@@ -588,8 +630,8 @@ ${JSON.stringify(gapAnalysisData, null, 2)}
 
 ## Industry & Career Trend Context (supplementary reference):
 ${
-  referenceResults.length > 0
-    ? JSON.stringify(referenceResults, null, 2)
+  resolvedReferenceResults.length > 0
+    ? JSON.stringify(resolvedReferenceResults, null, 2)
     : "(No reference data available — rely on general knowledge for career trends)"
 }
 
