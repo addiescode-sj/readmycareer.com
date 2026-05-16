@@ -357,15 +357,48 @@ def run_fixture(fixture: dict, client: httpx.Client, endpoint: str) -> dict:
 
     t0 = time.time()
     try:
-        resp = client.post(endpoint, json=fixture["request"])
-        result["latency_s"] = time.time() - t0
-        result["status_code"] = resp.status_code
+        # /api/analyze responds with text/event-stream (SSE). We need to read the
+        # stream line-by-line and extract the JSON payload from the `event: result`
+        # frame. Earlier `event: progress` frames are ignored; an `event: error`
+        # frame is surfaced as a failure.
+        data = None
+        sse_error: str | None = None
+        with client.stream("POST", endpoint, json=fixture["request"]) as resp:
+            result["status_code"] = resp.status_code
+            if resp.status_code != 200:
+                body_preview = resp.read().decode("utf-8", errors="replace")[:300]
+                result["latency_s"] = time.time() - t0
+                result["error"] = f"HTTP {resp.status_code}: {body_preview}"
+                return result
 
-        if resp.status_code != 200:
-            result["error"] = f"HTTP {resp.status_code}: {resp.text[:300]}"
+            current_event = "message"
+            for raw in resp.iter_lines():
+                # httpx yields str when the response is text; normalise just in case.
+                line = raw if isinstance(raw, str) else raw.decode("utf-8", errors="replace")
+                if not line:
+                    current_event = "message"
+                    continue
+                if line.startswith("event:"):
+                    current_event = line[6:].strip()
+                elif line.startswith("data:"):
+                    payload = line[5:].strip()
+                    if current_event == "result":
+                        try:
+                            data = json.loads(payload)
+                        except json.JSONDecodeError as exc:
+                            sse_error = f"result payload not JSON: {exc}"
+                    elif current_event == "error":
+                        try:
+                            sse_error = json.loads(payload).get("message") or payload
+                        except json.JSONDecodeError:
+                            sse_error = payload
+
+        result["latency_s"] = time.time() - t0
+
+        if data is None:
+            result["error"] = sse_error or "No `event: result` frame received from SSE stream"
             return result
 
-        data = resp.json()
         result["json_parse_ok"] = True
         result["response_json"] = data
 

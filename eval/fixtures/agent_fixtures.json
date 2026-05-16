@@ -99,6 +99,7 @@
       },
       "targetRole": "Product Engineer",
       "targetCompany": "Toss (Viva Republica)",
+      "jdText": "Toss is hiring a Product Engineer to build delightful, high-traffic financial products used by millions of users every day.\n\n[Responsibilities]\n- Own end-to-end delivery of customer-facing features across web and mobile\n- Design and implement REST/GraphQL APIs and integrate with internal payment systems\n- Collaborate with PMs and designers to ship A/B tested experiments weekly\n- Build secure auth flows using OAuth 2.0 and JWT-based session management\n- Operate services on AWS (EC2, RDS, S3, Lambda) and contribute to system design reviews\n\n[Required]\n- 2+ years of frontend development with React and TypeScript\n- Solid understanding of HTTP, REST, and modern web fundamentals\n- Backend experience (Node.js or Go) and ability to design APIs end-to-end\n- Familiarity with cloud infrastructure (AWS preferred) and CI/CD pipelines\n- Hands-on experience with system design for high-availability services\n\n[Preferred]\n- Fintech or payments domain experience\n- Contributions to open source, side projects, or technical writing",
       "durationWeeks": 8,
       "startDate": "2026-05-01"
     },
@@ -122,7 +123,12 @@
       30,
       70
     ],
-    "expected_categories": ["skill", "experience", "keyword", "portfolio"]
+    "expected_categories": [
+      "skill",
+      "experience",
+      "keyword",
+      "portfolio"
+    ]
   },
   {
     "id": "fx_python_backend_to_nodejs",
@@ -240,6 +246,7 @@
       },
       "targetRole": "Backend Engineer",
       "targetCompany": "Kakao",
+      "jdText": "Kakao is hiring a Backend Engineer for a new platform team building Node.js / TypeScript microservices that power services used by tens of millions of users.\n\n[Responsibilities]\n- Design, build, and operate Node.js services written in TypeScript (NestJS framework)\n- Own service-level SLOs, including latency, error budgets, and capacity planning\n- Integrate with existing PostgreSQL, Kafka, and Redis infrastructure on AWS\n- Lead code reviews, mentor mid-level engineers, and drive technical design discussions\n\n[Required]\n- 3+ years of backend engineering experience in production\n- Strong proficiency in Node.js, TypeScript, and JavaScript runtime internals\n- Production experience with NestJS (or equivalent Node.js framework)\n- RDBMS modeling and query optimization (PostgreSQL preferred)\n- Containerized deployment workflows (Docker, Kubernetes)\n\n[Preferred]\n- Prior experience migrating services between languages (Python → Node.js a plus)\n- Event-driven architecture with Kafka or similar message brokers\n- Experience operating services on AWS at scale",
       "durationWeeks": 6,
       "startDate": "2026-05-01"
     },
@@ -261,7 +268,11 @@
       55,
       85
     ],
-    "expected_categories": ["skill", "experience", "keyword"]
+    "expected_categories": [
+      "skill",
+      "experience",
+      "keyword"
+    ]
   },
   {
     "id": "fx_fullstack_global_tech",
@@ -395,6 +406,7 @@
       },
       "targetRole": "Software Engineer",
       "targetCompany": "Meta",
+      "jdText": "Meta is hiring Software Engineers across infrastructure, product, and platform teams to build systems serving billions of users worldwide.\n\n[Responsibilities]\n- Design and implement large-scale distributed systems used across the company\n- Write production code in multiple languages (Hack, Python, C++, Go, TypeScript)\n- Participate in System Design Interview-style reviews for new services\n- Contribute to open source projects and internal developer platforms\n- Collaborate across time zones with global engineering teams; all communication in English\n\n[Required]\n- 5+ years of professional software engineering experience\n- Strong algorithm and data structure fundamentals (LeetCode-style coding test required at onsite)\n- Proven experience with system design for high-traffic, low-latency services\n- Resume submitted in English; comfortable conducting interviews in English\n- Production experience with at least one of: React, TypeScript, Go, Kubernetes\n\n[Preferred]\n- Open source contributions or maintainership of widely-used libraries\n- Experience leading multi-team technical initiatives\n- Prior work at a global tech company (FAANG-tier preferred)",
       "durationWeeks": 12,
       "startDate": "2026-05-01"
     },
@@ -418,6 +430,11 @@
       50,
       85
     ],
-    "expected_categories": ["skill", "experience", "keyword", "portfolio"]
+    "expected_categories": [
+      "skill",
+      "experience",
+      "keyword",
+      "portfolio"
+    ]
   }
 ]
