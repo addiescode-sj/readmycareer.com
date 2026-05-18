@@ -12,8 +12,9 @@ const ALLOWED_MIMES = new Set([
   "application/msword",
 ]);
 
-const EXTRACT_TIMEOUT_MS = 10_000;
+const EXTRACT_TIMEOUT_MS = 20_000;
 const GEMINI_TIMEOUT_MS = 120_000;
+const PDF_INLINE_MAX_BYTES = 15 * 1024 * 1024; // Gemini inlineData practical cap
 
 // ─── Resume Schema (mirrored from mcp-skills/pdf-word-to-json) ────────────────
 
@@ -80,18 +81,27 @@ const ResumeJsonSchema = z.object({
       proficiency: z.string().nullable().catch(null),
     })
   ).catch([]),
-  raw_text: z.string(),
+  raw_text: z.string().catch(""),
 });
 
 type ResumeJson = z.infer<typeof ResumeJsonSchema>;
 
 // ─── Text Extraction ──────────────────────────────────────────────────────────
 
-async function extractText(buffer: Buffer, fileType: "pdf" | "docx"): Promise<string> {
-  if (fileType === "pdf") {
+async function extractTextFromPdf(buffer: Buffer): Promise<string> {
+  // pdf-parse on Vercel Node serverless is unreliable: it can throw on certain
+  // PDFs or silently return empty text for image-based or custom-encoded PDFs.
+  // Swallow failures here so the caller can fall back to Gemini inline PDF parsing.
+  try {
     const data = await pdf(buffer);
-    return data.text;
+    return data?.text ?? "";
+  } catch (err) {
+    console.warn("[/api/resume] pdf-parse failed, will fall back to inline Gemini PDF:", err);
+    return "";
   }
+}
+
+async function extractTextFromDocx(buffer: Buffer): Promise<string> {
   const result = await mammoth.extractRawText({ buffer });
   return result.value;
 }
@@ -110,35 +120,51 @@ const SCHEMA_DESCRIPTION = `
   "languages": [{ "language": string, "proficiency": string|null }]
 }`;
 
-async function parseWithGemini(rawText: string): Promise<ResumeJson> {
+type GeminiInput =
+  | { kind: "text"; rawText: string }
+  | { kind: "pdf"; buffer: Buffer };
+
+async function parseWithGemini(input: GeminiInput): Promise<ResumeJson> {
   const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) throw new Error("GOOGLE_API_KEY environment variable is not set.");
 
   const genai = new GoogleGenerativeAI(apiKey);
   const model = genai.getGenerativeModel({
     model: "gemini-3.1-flash-lite-preview",
-    generationConfig: { 
+    generationConfig: {
       responseMimeType: "application/json",
-      temperature: 0.1 // Lower temperature for more stable JSON
+      temperature: 0.1,
     },
   });
 
-  const prompt = `Analyze the resume text and convert it into the specified JSON schema.
-IMPORTANT: 
-- DO NOT include a "raw_text" field in your JSON. 
+  const instruction = `Analyze the resume and convert it into the specified JSON schema.
+IMPORTANT:
+- DO NOT include a "raw_text" field in your JSON.
 - Ensure all string values are on a single line (escape newlines as \\n if needed).
 - Output ONLY the JSON object.
 
 JSON Schema:
-${SCHEMA_DESCRIPTION}
+${SCHEMA_DESCRIPTION}`;
 
-Resume Text:
-${rawText.slice(0, 10000)}`;
+  const parts: Array<Record<string, unknown>> =
+    input.kind === "pdf"
+      ? [
+          {
+            inlineData: {
+              mimeType: "application/pdf",
+              data: input.buffer.toString("base64"),
+            },
+          },
+          { text: instruction },
+        ]
+      : [{ text: `${instruction}\n\nResume Text:\n${input.rawText.slice(0, 10000)}` }];
 
   const maxRetries = 3;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const result = await model.generateContent(prompt);
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: parts as never }],
+      });
       const rawResponse = result.response.text().trim();
 
       let parsed: any;
@@ -177,7 +203,7 @@ ${rawText.slice(0, 10000)}`;
         throw new Error("LLM did not provide a valid object-formatted response.");
       }
 
-      parsed.raw_text = rawText;
+      parsed.raw_text = input.kind === "text" ? input.rawText : "";
       return ResumeJsonSchema.parse(parsed);
     } catch (err: any) {
       const status = err?.status;
@@ -251,13 +277,15 @@ export async function POST(req: NextRequest) {
         controller.enqueue(sseChunk(event, data));
 
       try {
-        // Stage 1: extract text
+        // Stage 1: extract text (best-effort; PDFs may fall through to inline Gemini)
         send("progress", { stage: "extracting" });
 
-        let rawText: string;
+        let rawText = "";
         try {
           rawText = await Promise.race([
-            extractText(buffer, fileType),
+            fileType === "pdf"
+              ? extractTextFromPdf(buffer)
+              : extractTextFromDocx(buffer),
             new Promise<never>((_, reject) =>
               setTimeout(
                 () => reject(new Error("EXTRACT_TIMEOUT")),
@@ -266,15 +294,27 @@ export async function POST(req: NextRequest) {
             ),
           ]);
         } catch (err: any) {
-          console.error("[/api/resume] Extraction error:", err);
-          send("error", {
-            code: "EXTRACT_FAILED",
-            message: err?.message ?? "",
-          });
+          if (fileType !== "pdf") {
+            console.error("[/api/resume] Extraction error:", err);
+            send("error", {
+              code: "EXTRACT_FAILED",
+              message: err?.message ?? "",
+            });
+            return;
+          }
+          console.warn("[/api/resume] PDF extract timeout, falling back to inline Gemini:", err);
+        }
+
+        // DOCX must yield text. For PDFs we tolerate empty (Gemini handles bytes).
+        if (fileType === "docx" && !rawText.trim()) {
+          send("error", { code: "EXTRACT_EMPTY", message: "" });
           return;
         }
 
-        if (!rawText.trim()) {
+        const useInlinePdf =
+          fileType === "pdf" && !rawText.trim() && buffer.byteLength <= PDF_INLINE_MAX_BYTES;
+
+        if (fileType === "pdf" && !rawText.trim() && buffer.byteLength > PDF_INLINE_MAX_BYTES) {
           send("error", { code: "EXTRACT_EMPTY", message: "" });
           return;
         }
@@ -282,10 +322,14 @@ export async function POST(req: NextRequest) {
         // Stage 2: parse with Gemini
         send("progress", { stage: "parsing" });
 
+        const geminiInput: GeminiInput = useInlinePdf
+          ? { kind: "pdf", buffer }
+          : { kind: "text", rawText };
+
         let parsed: ResumeJson;
         try {
           parsed = await Promise.race([
-            parseWithGemini(rawText),
+            parseWithGemini(geminiInput),
             new Promise<never>((_, reject) =>
               setTimeout(
                 () => reject(new Error("PARSE_TIMEOUT")),
