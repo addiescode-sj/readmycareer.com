@@ -38,6 +38,11 @@ function getPineconeIndex() {
   return getPineconeClient().index(process.env.PINECONE_INDEX_NAME!);
 }
 
+// Field Pinecone embeds for the integrated index. Must match the career-knowledge-base
+// sync (TEXT_FIELD there) and the index field map (readmycareer maps text -> "text").
+// Override via PINECONE_TEXT_FIELD.
+const TEXT_FIELD = process.env.PINECONE_TEXT_FIELD ?? "text";
+
 // ── BM25 helpers ──────────────────────────────────────────────────────────────
 
 const BM25_K1 = 1.5;
@@ -74,30 +79,25 @@ async function searchRag(query: string, topK = 5): Promise<string[]> {
       ),
     ]);
 
-  // 1. Embed query
-  const genai = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
-  const embedModel = genai.getGenerativeModel({ model: "gemini-embedding-001" });
-  const embedResult = await withTimeout(
-    embedModel.embedContent(query.replace(/\n+/g, " ")),
-    10_000,
-    "임베딩"
-  );
-  const embedding = embedResult.embedding.values;
-
-  // 2. Dense vector search (fetch more candidates for hybrid)
+  // 1. Semantic search via Pinecone integrated inference (query embedded server-side)
   const index = getPineconeIndex();
-  const denseResults = await withTimeout(
-    index.query({ vector: embedding, topK: fetchK, includeMetadata: true }),
+  const searchResp = await withTimeout(
+    index.searchRecords({
+      query: { topK: fetchK, inputs: { text: query.replace(/\n+/g, " ") } },
+      fields: [TEXT_FIELD],
+    }),
     10_000,
     "Pinecone 검색"
   );
 
-  const candidates = (denseResults.matches ?? []).filter((m) => m.metadata?.["text"]);
+  const candidates = (searchResp.result?.hits ?? [])
+    .map((h) => ({ id: h._id, text: String((h.fields as Record<string, unknown>)?.[TEXT_FIELD] ?? "") }))
+    .filter((c) => c.text);
   if (candidates.length === 0) return [];
 
-  // 3. BM25 scoring
+  // 2. BM25 scoring
   const queryTokens = tokenize(query);
-  const docTokensList = candidates.map((m) => tokenize((m.metadata!["text"] as string) ?? ""));
+  const docTokensList = candidates.map((m) => tokenize(m.text));
   const avgDocLen = docTokensList.reduce((s, d) => s + d.length, 0) / docTokensList.length || 1;
   const bm25Scores = candidates.map((m, i) => ({
     id: m.id,
@@ -133,7 +133,7 @@ async function searchRag(query: string, topK = 5): Promise<string[]> {
       pc.inference.rerank(
         "bge-reranker-v2-m3",
         query,
-        topCandidates.map((m) => ({ text: (m.metadata!["text"] as string) ?? "" })),
+        topCandidates.map((m) => ({ text: m.text })),
         { topN: topK, returnDocuments: false }
       ),
       8_000,
@@ -145,7 +145,7 @@ async function searchRag(query: string, topK = 5): Promise<string[]> {
   }
 
   return topCandidates
-    .map((m) => (m.metadata?.["text"] as string) ?? "")
+    .map((m) => m.text)
     .filter(Boolean);
 }
 

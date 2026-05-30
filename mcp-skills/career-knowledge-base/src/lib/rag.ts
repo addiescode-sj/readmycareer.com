@@ -1,9 +1,29 @@
 // ─── RAG Pipeline ─────────────────────────────────────────────────────────────
-// Generates embeddings with Gemini gemini-embedding-001 and stores/queries them in Pinecone
-// Supports hybrid search (Dense + BM25 RRF) and Pinecone Inference Reranking
+// Uses Pinecone INTEGRATED inference: text records are upserted as-is and Pinecone
+// embeds them server-side with the index's hosted model (llama-text-embed-v2).
+// Supports hybrid search (semantic + client-side BM25 RRF) and Pinecone reranking.
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Pinecone } from "@pinecone-database/pinecone";
+
+// ── Index contract ───────────────────────────────────────────────────────────
+// The Pinecone index referenced by PINECONE_INDEX_NAME is an INTEGRATED-inference
+// index (created "for a model", e.g. llama-text-embed-v2). Such indexes embed text
+// server-side, so records are written with `upsertRecords()` (NOT `upsert()` with
+// client vectors) and searched with `searchRecords({ query: { inputs: { text } } })`.
+//
+// Upserting client-supplied vectors into an integrated index is rejected, which is
+// why the previous Gemini-embedding code left the index empty (record count 0).
+//
+// TEXT_FIELD must match the index's field map (the field Pinecone embeds). The
+// `readmycareer` integrated index maps text -> "text" (verified via describeIndex),
+// so that is the default. Override with PINECONE_TEXT_FIELD for a different index.
+const TEXT_FIELD = process.env.PINECONE_TEXT_FIELD ?? "text";
+
+// Hosted reranking model paired with searchRecords. Override via PINECONE_RERANK_MODEL.
+const RERANK_MODEL = process.env.PINECONE_RERANK_MODEL ?? "bge-reranker-v2-m3";
+
+// Pinecone caps integrated upsertRecords at 96 records per request.
+const UPSERT_BATCH = 96;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -41,17 +61,7 @@ export interface SearchOptions {
 
 // ── Lazy-initialized clients ──────────────────────────────────────────────────
 
-let _genai: GoogleGenerativeAI | null = null;
 let _pc: Pinecone | null = null;
-
-function getEmbeddingModel() {
-  if (!_genai) {
-    const apiKey = process.env.GOOGLE_API_KEY;
-    if (!apiKey) throw new Error("GOOGLE_API_KEY environment variable is not set.");
-    _genai = new GoogleGenerativeAI(apiKey);
-  }
-  return _genai.getGenerativeModel({ model: "gemini-embedding-001" });
-}
 
 function getPineconeClient(): Pinecone {
   if (!_pc) {
@@ -132,7 +142,7 @@ async function applyReranking(
   const pc = getPineconeClient();
   try {
     const rerankResult = await pc.inference.rerank(
-      "bge-reranker-v2-m3",
+      RERANK_MODEL,
       query,
       results.map((r) => ({ id: r.doc_id, text: r.text })),
       { topN, returnDocuments: false }
@@ -150,50 +160,43 @@ async function applyReranking(
 // ── Core functions ────────────────────────────────────────────────────────────
 
 /**
- * Embeds text using Gemini gemini-embedding-001 (768 dims)
- */
-export async function embedText(text: string): Promise<number[]> {
-  const model = getEmbeddingModel();
-  const result = await model.embedContent(text.replace(/\n+/g, " ").trim());
-  return result.embedding.values;
-}
-
-/**
- * Embeds an array of JdDocuments and upserts them into Pinecone (in batches of 100)
- * - Overwrites existing entries with the same doc_id (supports Google Drive re-sync)
+ * Upserts JdDocuments into the integrated Pinecone index in batches.
+ *
+ * The text lives in TEXT_FIELD, which Pinecone embeds server-side (no client-side
+ * embedding). All other fields are stored as record metadata. Re-syncing the same
+ * doc_id overwrites the existing record, so Google Drive re-runs stay idempotent.
  */
 export async function upsertDocuments(docs: JdDocument[]): Promise<void> {
   if (docs.length === 0) return;
 
   const index = getPineconeIndex();
-  const BATCH = 100;
 
-  for (let i = 0; i < docs.length; i += BATCH) {
-    const batch = docs.slice(i, i + BATCH);
-    const embeddings = await Promise.all(batch.map((d) => embedText(d.text)));
+  for (let i = 0; i < docs.length; i += UPSERT_BATCH) {
+    const batch = docs.slice(i, i + UPSERT_BATCH);
 
-    const vectors = batch.map((doc, j) => ({
+    const records = batch.map((doc) => ({
+      // Spread caller metadata first so the canonical fields below always win.
+      ...(doc.metadata ?? {}),
       id: doc.doc_id,
-      values: embeddings[j],
-      metadata: {
-        doc_type: doc.doc_type,
-        title: doc.title,
-        chunk_index: doc.chunk_index,
-        text: doc.text,
-        tags: (doc.tags ?? []).join(","),
-        ...(doc.metadata ?? {}),
-      },
+      [TEXT_FIELD]: doc.text,
+      doc_type: doc.doc_type,
+      title: doc.title,
+      chunk_index: doc.chunk_index,
+      tags: (doc.tags ?? []).join(","),
     }));
 
-    await index.upsert(vectors);
+    await index.upsertRecords(
+      records as Parameters<typeof index.upsertRecords>[0]
+    );
   }
 }
 
 /**
- * Dense vector query (internal use only)
+ * Semantic search against the integrated index (internal use only).
+ * Pinecone embeds the query text server-side with the index's hosted model.
  */
-async function _denseQuery(
-  queryEmbedding: number[],
+async function _integratedSearch(
+  query: string,
   fetchK: number,
   filter?: { doc_type?: "jd" | "reference" | "all"; tags?: string[] }
 ): Promise<RagSearchResult[]> {
@@ -204,31 +207,34 @@ async function _denseQuery(
     pineconeFilter["doc_type"] = { $eq: filter.doc_type };
   }
 
-  const response = await index.query({
-    vector: queryEmbedding,
-    topK: fetchK,
-    includeMetadata: true,
-    filter: Object.keys(pineconeFilter).length > 0 ? pineconeFilter : undefined,
+  const response = await index.searchRecords({
+    query: {
+      topK: fetchK,
+      inputs: { text: query },
+      filter: Object.keys(pineconeFilter).length > 0 ? pineconeFilter : undefined,
+    },
+    fields: [TEXT_FIELD, "doc_type", "title", "chunk_index", "tags"],
   });
 
-  return (response.matches ?? []).map((match) => {
-    const meta = (match.metadata ?? {}) as Record<string, unknown>;
+  const hits = response.result?.hits ?? [];
+  return hits.map((hit) => {
+    const f = (hit.fields ?? {}) as Record<string, unknown>;
     return {
-      doc_id: match.id,
-      doc_type: (meta["doc_type"] as "jd" | "reference") ?? "jd",
-      title: (meta["title"] as string) ?? "",
-      chunk_index: (meta["chunk_index"] as number) ?? 0,
-      score: match.score ?? 0,
-      text: (meta["text"] as string) ?? "",
-      metadata: meta,
+      doc_id: hit._id,
+      doc_type: (f["doc_type"] as "jd" | "reference") ?? "jd",
+      title: (f["title"] as string) ?? "",
+      chunk_index: Number(f["chunk_index"] ?? 0),
+      score: hit._score ?? 0,
+      text: (f[TEXT_FIELD] as string) ?? "",
+      metadata: f,
     };
   });
 }
 
 /**
- * Embeds a natural language query and searches Pinecone
+ * Searches the integrated Pinecone index for a natural language query.
  *
- * Defaults: hybrid search (Dense + BM25 RRF) + Pinecone Reranking both enabled
+ * Defaults: hybrid search (semantic + BM25 RRF) + Pinecone Reranking both enabled
  *
  * @param query   Search query (JD keywords, skill names, etc.)
  * @param topK    Maximum number of chunks to return (default 5)
@@ -253,8 +259,8 @@ export async function similaritySearch(
   // Fetch more candidates in hybrid mode to enable RRF fusion
   const fetchK = hybrid ? topK * candidateMultiplier : topK;
 
-  const queryEmbedding = await embedText(query);
-  const candidates = await _denseQuery(queryEmbedding, fetchK, filter);
+  // Pinecone embeds the query server-side (integrated inference).
+  const candidates = await _integratedSearch(query, fetchK, filter);
 
   let results: RagSearchResult[];
 
