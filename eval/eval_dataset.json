@@ -23,5 +23,41 @@
     "question": "What is lacking in my current resume compared to the standards of global tech companies?",
     "ground_truth": "Global tech companies emphasize English resumes, system design experience, open-source contributions, and experience handling large-scale traffic. Algorithm problem-solving skills (LeetCode) and English communication abilities are also essential.",
     "contexts_query": "Global tech company hiring requirements and resume standards"
+  },
+  {
+    "category": "A — Skill Taxonomy & Tech Synonyms",
+    "question": "I have hands-on experience with AWS ECS; does that transfer to a role that requires GCP Cloud Run?",
+    "ground_truth": "Yes. AWS ECS and GCP Cloud Run are equivalent container-orchestration / serverless-container services, so ECS experience transfers directly to Cloud Run. The Tech Stack Equivalence Matrix maps these as multi-cloud alternatives; the underlying concepts (containerization, autoscaling, service deployment) are the same and only the provider-specific tooling differs.",
+    "contexts_query": "AWS ECS GCP Cloud Run equivalent container orchestration tech stack equivalence",
+    "doc_type": "reference",
+    "expected_doc_type": "reference",
+    "expected_tags": ["taxonomy", "skill-equivalence", "cloud"]
+  },
+  {
+    "category": "B — Role & Company Tier Profiles",
+    "question": "The JD only lists 'Java, Spring Boot, MySQL'. As a senior role at a large enterprise, what hidden expectations should I prepare for?",
+    "ground_truth": "Beyond the listed basics, a senior enterprise role implies unspoken expectations: distributed system design, caching with Redis, message queuing with Kafka, automated CI/CD pipelines, large-scale traffic optimization, and adherence to rigorous software-development standards. Enterprises favor specialists with cross-functional coordination skills, unlike early-stage startups that prioritize generalists.",
+    "contexts_query": "senior enterprise engineer hidden expectations distributed systems company tier career ladder",
+    "doc_type": "reference",
+    "expected_doc_type": "reference",
+    "expected_tags": ["company-tier", "career-ladder", "hidden-expectations"]
+  },
+  {
+    "category": "C — Learning Pathways & Roadmaps",
+    "question": "I want to learn Kubernetes but I have no Docker or CI/CD experience. What is the correct learning order?",
+    "ground_truth": "Kubernetes should not be tackled first. The standard learning pathway requires foundational containerization (Docker) and CI/CD experience before Kubernetes, because Kubernetes orchestrates containers and assumes those prerequisites. The recommended order is: Docker and containerization fundamentals, then CI/CD pipelines, and only then Kubernetes orchestration.",
+    "contexts_query": "DevOps learning pathway prerequisite Docker CI/CD before Kubernetes roadmap",
+    "doc_type": "reference",
+    "expected_doc_type": "reference",
+    "expected_tags": ["roadmap", "learning-path", "devops"]
+  },
+  {
+    "category": "D — Hiring Trends & Interview Frameworks",
+    "question": "Is deep Redux expertise still a strong differentiator for modern frontend roles, or should I prioritize something else?",
+    "ground_truth": "Deep expertise in legacy, boilerplate-heavy Redux is less valued today than modern reactive state management or React Server Components. Annual trend reports (e.g., Stack Overflow Developer Survey, State of JS) indicate the market is shifting toward modern state solutions, so candidates should prioritize current, in-demand competencies and deprioritize obsolete requirements copy-pasted from old job templates.",
+    "contexts_query": "frontend hiring trends Redux legacy vs React Server Components state of JS developer survey",
+    "doc_type": "reference",
+    "expected_doc_type": "reference",
+    "expected_tags": ["hiring-trends", "frontend", "market"]
   }
 ]

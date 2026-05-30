@@ -128,6 +128,19 @@
       "experience",
       "keyword",
       "portfolio"
+    ],
+    "expected_hidden_expectations": [
+      "idempoten",
+      "monitoring",
+      "observability",
+      "security",
+      "compliance",
+      "feature flag",
+      "rollout"
+    ],
+    "expected_prerequisite_pairs": [
+      ["Node.js", "system design"],
+      ["REST", "system design"]
     ]
   },
   {
@@ -272,6 +285,19 @@
       "skill",
       "experience",
       "keyword"
+    ],
+    "expected_hidden_expectations": [
+      "SLO",
+      "error budget",
+      "capacity",
+      "mentor",
+      "code review",
+      "Kubernetes",
+      "observability"
+    ],
+    "expected_prerequisite_pairs": [
+      ["TypeScript", "NestJS"],
+      ["Node.js", "NestJS"]
     ]
   },
   {
@@ -435,6 +461,18 @@
       "experience",
       "keyword",
       "portfolio"
+    ],
+    "expected_hidden_expectations": [
+      "algorithm",
+      "data structure",
+      "behavioral",
+      "communication",
+      "cross-team",
+      "distributed"
+    ],
+    "expected_prerequisite_pairs": [
+      ["Algorithm", "System Design Interview"],
+      ["data structure", "System Design Interview"]
     ]
   }
 ]

@@ -72,7 +72,8 @@ if [[ "$SKIP_RAG" == "false" ]]; then
   echo "────────────────────────────────────────────────────────────────────"
   echo "  [1/2] RAG Retrieval Quality Evaluation (ragas_eval.py)"
   echo "────────────────────────────────────────────────────────────────────"
-  echo "  Metrics: Faithfulness, Answer Relevancy, Context Precision, Context Recall"
+  echo "  Metrics: Faithfulness, Answer Relevancy, Context Precision, Context Recall,"
+  echo "           Reference Grounding (report corpus actually retrieved)"
   echo ""
   set +e
   "$PYTHON" "$EVAL_DIR/ragas_eval.py"
@@ -97,7 +98,8 @@ echo "────────────────────────�
 echo "  [2/2] Agent Output Quality Evaluation (agent_harness.py)"
 echo "────────────────────────────────────────────────────────────────────"
 echo "  Metrics: Schema Compliance, Gap Faithfulness, Plan Completeness,"
-echo "           Date Consistency, p95 Latency, Avg Cost"
+echo "           Date Consistency, p95 Latency, Avg Cost,"
+echo "           Hidden Expectation Coverage, Prerequisite Ordering, Contextual Depth"
 echo ""
 
 # Check server response
@@ -161,5 +163,6 @@ fi
 if [[ -f "$EVAL_DIR/agent_harness_results.csv" ]]; then
   echo "  Agent Results: eval/agent_harness_results.csv"
 fi
+echo "  Criteria:      eval/QUALITY_CRITERIA.md (metric definitions & thresholds)"
 
 exit $FINAL_EXIT

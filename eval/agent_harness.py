@@ -12,6 +12,22 @@ Calls the POST /api/analyze endpoint to measure the following metrics:
   6. p50 / p95 Latency        — Percentile response times
   7. Avg Cost / Request       — Estimated cost based on gemini-2.0-flash pricing
 
+RAG-grounding metrics (added once the Pinecone reference corpus — the report
+files synced from Google Drive, README §2 Categories A–D — is seeded). These
+measure whether the reference context actually reduces the five contextual gaps
+the README §1 enumerates, i.e. that output quality improves *beyond* naive
+keyword matching:
+
+  8. Hidden Expectation Coverage — gap analysis surfaces at least one implicit,
+                                   non-JD-literal expectation for the role/tier
+                                   (README gap area #2)
+  9. Prerequisite Ordering       — foundational gaps are not ranked below the
+                                   advanced gaps that depend on them
+                                   (README gap area #5)
+ 10. Contextual Depth (LLM-judge)— holistic score for skill transferability,
+                                   company-tier fit, and market relevance
+                                   (README gap areas #1, #3, #4)
+
 Execution:
     # Run server first: pnpm dev (in root directory)
     cd eval
@@ -63,7 +79,14 @@ THRESHOLDS: dict[str, float] = {
     "category_diversity_rate": 1.00,
     "project_portfolio_strength_rate": 0.80,   # fixtures with projects must have ≥1 portfolio strength
     "project_plan_integration_rate": 0.70,     # fixtures with projects must reference a project in ≥1 todo
+    # ── RAG-grounding thresholds (reference corpus must be seeded) ──────────────
+    "hidden_expectation_coverage_rate": 0.66,  # surfaces ≥1 implicit expectation (README gap #2)
+    "prerequisite_ordering_rate": 1.00,        # ordering invariant — never rank a prereq below its dependant (gap #5)
+    "contextual_depth": 0.70,                  # LLM-judge depth beyond keyword matching (gaps #1/#3/#4)
 }
+
+# Priority ranking weights — lower number == higher priority (ranked earlier).
+PRIORITY_WEIGHT: dict[str, int] = {"high": 0, "medium": 1, "low": 2}
 
 # ── JSON schema definition ────────────────────────────────────────────────────
 # Based on the return structure of runCareerAnalysis() in orchestrator.ts.
@@ -237,6 +260,144 @@ def check_project_plan_integration(data: dict, fixture: dict) -> bool:
     return False
 
 
+# ── RAG-grounding structural checks ───────────────────────────────────────────
+# These checks are only meaningful once the Pinecone reference corpus (README §2,
+# the report files synced from Google Drive) is seeded — the reference context is
+# what allows the agent to reason about expectations that are NOT spelled out in
+# the JD. They are fixture-driven: a fixture that does not declare the relevant
+# expectation field is treated as "not applicable" and passes.
+
+
+def check_hidden_expectations(data: dict, fixture: dict) -> bool:
+    """
+    Checks that the gap analysis surfaces at least one *implicit* expectation —
+    a skill/competency that the reference corpus associates with the role + company
+    tier but that is NOT spelled out verbatim in the JD (README gap area #2).
+
+    Lenient OR-match: passing requires only one of the fixture's expected hidden
+    expectations to appear anywhere in the gap_analysis (case-insensitive).
+    """
+    expected = [e.lower() for e in fixture.get("expected_hidden_expectations", [])]
+    if not expected:
+        return True  # fixture does not exercise this dimension — not applicable
+    blob = json.dumps(data.get("gap_analysis", {}), ensure_ascii=False).lower()
+    return any(e in blob for e in expected)
+
+
+def check_prerequisite_ordering(data: dict, fixture: dict) -> bool:
+    """
+    Checks that no foundational gap is ranked *below* an advanced gap that depends
+    on it (README gap area #5 — unstructured progression trajectories).
+
+    For each [before, after] pair the fixture declares, locate the first gap that
+    mentions each term and compare their rank, where rank = (priority_weight,
+    array_index). The prerequisite (`before`) must not rank lower than its
+    dependant (`after`). A pair whose terms are not both present is skipped.
+    """
+    pairs = fixture.get("expected_prerequisite_pairs", [])
+    if not pairs:
+        return True  # not applicable
+    gaps = data.get("gap_analysis", {}).get("gaps", [])
+    if not gaps:
+        return False
+
+    def rank_of(term: str) -> tuple[int, int] | None:
+        term = term.lower()
+        for idx, g in enumerate(gaps):
+            text = ((g.get("item") or "") + " " + (g.get("rationale") or "")).lower()
+            if term in text:
+                return (PRIORITY_WEIGHT.get(g.get("priority", ""), 1), idx)
+        return None
+
+    for before, after in pairs:
+        rb = rank_of(before)
+        ra = rank_of(after)
+        if rb is None or ra is None:
+            continue  # cannot compare — skip this pair
+        if rb > ra:  # prerequisite ranked strictly below its dependant → violation
+            return False
+    return True
+
+
+# ── LLM-as-judge: Contextual Depth ────────────────────────────────────────────
+
+
+def judge_contextual_depth(
+    fixture: dict,
+    response_json: dict,
+    model: Any,
+) -> float:
+    """
+    Uses Gemini Flash to score how much *contextual depth* the gap analysis
+    demonstrates beyond naive keyword matching, on a 0.0~1.0 scale. This is the
+    headline measure of whether the RAG reference corpus is paying off: it rewards
+    reasoning the corpus is meant to enable (README gap areas #1, #3, #4):
+
+      - Skill transferability / synonym resolution (e.g. ECS → Cloud Run, Python → Node.js)
+      - Company stage & tier fit (startup generalist vs. big-tech specialist)
+      - Market relevance (prioritising current, in-demand skills over legacy ones)
+    """
+    gap_analysis = response_json.get("gap_analysis", {})
+    if not gap_analysis.get("gaps"):
+        return 0.0
+
+    target_role = fixture.get("request", {}).get("targetRole", "")
+    target_company = fixture.get("request", {}).get("targetCompany", "")
+    analysis_text = json.dumps(
+        {
+            "summary": gap_analysis.get("summary", ""),
+            "strengths": [
+                {"item": s.get("item", ""), "evidence": s.get("evidence", "")}
+                for s in gap_analysis.get("strengths", [])[:6]
+            ],
+            "gaps": [
+                {"item": g.get("item", ""), "rationale": g.get("rationale", "")}
+                for g in gap_analysis.get("gaps", [])[:6]
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    prompt = f"""You are an expert evaluator of AI career-coaching output.
+
+Score, from 0.0 to 1.0, how much CONTEXTUAL DEPTH the gap analysis below shows
+BEYOND naive keyword matching, for a candidate targeting the role
+"{target_role}" at "{target_company}".
+
+Award credit for any of these (the more, the higher the score):
+- Skill transferability / synonym resolution (recognising that existing skills
+  map to required ones, e.g. AWS ECS ↔ GCP Cloud Run, Python ↔ Node.js paradigm).
+- Company stage & tier fit (startup generalist vs. big-tech specialist expectations).
+- Market relevance (prioritising currently in-demand skills, deprioritising legacy).
+
+Scoring guide:
+- 1.0: Rich, role/tier-aware reasoning across multiple dimensions above.
+- 0.7: Some genuine contextual reasoning, not just restating JD keywords.
+- 0.4: Mostly keyword restatement with little added context.
+- 0.0: Pure keyword matching, no contextual reasoning.
+
+Output ONLY this JSON: {{"score": 0.8, "reasoning": "one sentence"}}
+
+[Gap Analysis]
+{analysis_text}
+"""
+
+    try:
+        resp = model.generate_content(
+            prompt,
+            generation_config={
+                "response_mime_type": "application/json",
+                "max_output_tokens": 256,
+            },
+        )
+        parsed = json.loads(resp.text)
+        score = float(parsed.get("score", 0.0))
+        return max(0.0, min(1.0, score))
+    except Exception as exc:
+        print(f"  [WARN] LLM contextual-depth judge error: {exc}")
+        return 0.0
+
+
 # ── Cost estimation ───────────────────────────────────────────────────────────
 
 
@@ -341,12 +502,15 @@ def run_fixture(fixture: dict, client: httpx.Client, endpoint: str) -> dict:
         "schema_valid": False,
         "schema_errors": [],
         "gap_faithfulness": None,
+        "contextual_depth": None,
         "plan_completeness": False,
         "date_consistent": False,
         "match_score_in_range": False,
         "category_diversity_ok": False,
         "project_portfolio_strength": False,
         "project_plan_integration": False,
+        "hidden_expectation_coverage": False,
+        "prerequisite_ordering_ok": False,
         "overall_match_score": None,
         "prompt_tokens": 0,
         "completion_tokens": 0,
@@ -464,6 +628,10 @@ def run_fixture(fixture: dict, client: httpx.Client, endpoint: str) -> dict:
         result["project_portfolio_strength"] = True
         result["project_plan_integration"] = True
 
+    # RAG-grounding structural checks (fixture-driven; N/A → pass)
+    result["hidden_expectation_coverage"] = check_hidden_expectations(data, fixture)
+    result["prerequisite_ordering_ok"] = check_prerequisite_ordering(data, fixture)
+
     return result
 
 
@@ -488,6 +656,11 @@ def compute_metrics(results: list[dict]) -> dict:
         r["gap_faithfulness"]
         for r in successful
         if r["gap_faithfulness"] is not None
+    ]
+    depth_scores = [
+        r["contextual_depth"]
+        for r in successful
+        if r["contextual_depth"] is not None
     ]
 
     return {
@@ -530,6 +703,21 @@ def compute_metrics(results: list[dict]) -> dict:
             sum(1 for r in successful if r.get("project_plan_integration", False)) / len(successful)
             if successful
             else 0.0
+        ),
+        "hidden_expectation_coverage_rate": (
+            sum(1 for r in successful if r.get("hidden_expectation_coverage", False)) / len(successful)
+            if successful
+            else 0.0
+        ),
+        "prerequisite_ordering_rate": (
+            sum(1 for r in successful if r.get("prerequisite_ordering_ok", False)) / len(successful)
+            if successful
+            else 0.0
+        ),
+        "contextual_depth": (
+            sum(depth_scores) / len(depth_scores)
+            if depth_scores
+            else float("nan")
         ),
         "total_fixtures": n,
         "successful_fixtures": len(successful),
@@ -631,6 +819,28 @@ def print_summary(metrics: dict, all_pass: bool) -> None:
             f">= {THRESHOLDS['project_plan_integration_rate']:.0%}",
             _pass_fail(metrics["project_plan_integration_rate"] >= THRESHOLDS["project_plan_integration_rate"]),
         ],
+        [
+            "Hidden Expectation Coverage",
+            f"{metrics['hidden_expectation_coverage_rate']:.2%}",
+            f">= {THRESHOLDS['hidden_expectation_coverage_rate']:.0%}",
+            _pass_fail(metrics["hidden_expectation_coverage_rate"] >= THRESHOLDS["hidden_expectation_coverage_rate"]),
+        ],
+        [
+            "Prerequisite Ordering",
+            f"{metrics['prerequisite_ordering_rate']:.2%}",
+            "= 100%",
+            _pass_fail(metrics["prerequisite_ordering_rate"] >= THRESHOLDS["prerequisite_ordering_rate"]),
+        ],
+        [
+            "Contextual Depth (LLM-judge)",
+            _fmt_nan(metrics["contextual_depth"], ".4f"),
+            f">= {THRESHOLDS['contextual_depth']}",
+            (
+                "SKIP"
+                if __import__("math").isnan(metrics["contextual_depth"])
+                else _pass_fail(metrics["contextual_depth"] >= THRESHOLDS["contextual_depth"])
+            ),
+        ],
     ]
 
     print(
@@ -683,10 +893,14 @@ def all_thresholds_met(metrics: dict) -> bool:
         metrics["category_diversity_rate"] >= THRESHOLDS["category_diversity_rate"],
         metrics["project_portfolio_strength_rate"] >= THRESHOLDS["project_portfolio_strength_rate"],
         metrics["project_plan_integration_rate"] >= THRESHOLDS["project_plan_integration_rate"],
+        metrics["hidden_expectation_coverage_rate"] >= THRESHOLDS["hidden_expectation_coverage_rate"],
+        metrics["prerequisite_ordering_rate"] >= THRESHOLDS["prerequisite_ordering_rate"],
     ]
-    # gap_faithfulness: skip check if NaN (judge was skipped)
+    # LLM-judge metrics: skip check if NaN (judge was skipped)
     if not math.isnan(metrics["gap_faithfulness"]):
         checks.append(metrics["gap_faithfulness"] >= THRESHOLDS["gap_faithfulness"])
+    if not math.isnan(metrics["contextual_depth"]):
+        checks.append(metrics["contextual_depth"] >= THRESHOLDS["contextual_depth"])
     return all(checks)
 
 
@@ -783,6 +997,11 @@ def main() -> int:
                         fixture, result["response_json"], llm_model
                     )
                     print(f" {result['gap_faithfulness']:.2f}")
+                    print("  → LLM judging contextual depth...", end="", flush=True)
+                    result["contextual_depth"] = judge_contextual_depth(
+                        fixture, result["response_json"], llm_model
+                    )
+                    print(f" {result['contextual_depth']:.2f}")
 
             # Cost estimation
             pt, ct, cost = estimate_cost(fixture, result.get("response_json"))
