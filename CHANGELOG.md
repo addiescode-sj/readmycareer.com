@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.2] - 2026-05-30
+
+### Fixed
+
+- **RAG sync produced 0 records (Google Drive → Pinecone)**: the `readmycareer` index is an integrated `llama-text-embed-v2` index that embeds text server-side, but the `career-knowledge-base` skill and chat route were generating client-side Gemini `gemini-embedding-001` vectors and calling `index.upsert()` / `index.query({ vector })`. Integrated indexes reject client-supplied vectors — and the dimensions differed (3072 vs 1024) — so every upsert failed and the index stayed empty. Migrated the RAG path to Pinecone integrated inference (`upsertRecords` / `searchRecords`; embedded field `text`, overridable via `PINECONE_TEXT_FIELD`). ([`4ec1e5b`](../../commit/4ec1e5b))
+- **Drive sync aborted with `Invalid array length`**: `chunkText` could stop advancing when a document's trailing slice was ≤ the overlap size, spinning until the chunk array hit the JS length limit. Now guarantees forward progress and terminates on the final chunk. ([`abf8b7f`](../../commit/abf8b7f))
+- **Drive folder access failures**: the connector now accepts pasted folder URLs (normalized to bare IDs), supports Shared Drive folders (`supportsAllDrives` / `includeItemsFromAllDrives`), and reports the failing folder ID in the error message. ([`abf8b7f`](../../commit/abf8b7f))
+- **`/api/sync` masked the real error**: the route crashed on `JSON.parse` when the MCP tool returned a plain-text error, hiding the actual cause. Now honors the tool `isError` flag and returns the message with a 500. ([`5c37926`](../../commit/5c37926))
+
+### Documentation
+
+- **RAG background & reference architecture**: README now documents the contextual gaps in JD/resume matching and the Pinecone knowledge-base category inventory. ([`040c671`](../../commit/040c671))
+
+### Tests
+
+- **Eval coverage**: added `eval/QUALITY_CRITERIA.md` (per-metric ship-gate contract) and expanded the agent/RAG harness, dataset, and fixtures. ([`3709187`](../../commit/3709187))
+
+---
+
 ## [0.5.1] - 2026-05-12
 
 ### Fixed
