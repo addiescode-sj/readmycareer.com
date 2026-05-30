@@ -46,19 +46,47 @@ function getAuthClient() {
 // ── Drive API helpers ─────────────────────────────────────────────────────────
 
 /**
+ * Normalizes a folder reference to a bare Drive ID.
+ * Accepts a raw ID or a pasted URL like
+ * `https://drive.google.com/drive/folders/<ID>?usp=sharing`.
+ */
+function normalizeFolderId(raw: string): string {
+  const trimmed = (raw ?? "").trim();
+  const match = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  if (match) return match[1];
+  // Strip any leftover query string / slashes from a bare-ish value.
+  return trimmed.replace(/[?#].*$/, "").replace(/\/+$/, "");
+}
+
+/**
  * Returns a list of files in the specified folder ID.
  * - Supported formats: Google Docs, plain text (.txt), Markdown (.md)
  */
 export async function listDriveFiles(folderId: string): Promise<DriveFile[]> {
+  // Accept either a bare folder ID or a pasted Drive URL and normalize to the ID.
+  const id = normalizeFolderId(folderId);
+
   const auth = getAuthClient();
   const drive = google.drive({ version: "v3", auth });
 
-  const res = await drive.files.list({
-    q: `'${folderId}' in parents and trashed = false`,
-    fields: "files(id, name, mimeType)",
-    pageSize: 200,
-    orderBy: "name",
-  });
+  let res;
+  try {
+    res = await drive.files.list({
+      q: `'${id}' in parents and trashed = false`,
+      fields: "files(id, name, mimeType)",
+      pageSize: 200,
+      orderBy: "name",
+      // Required for folders that live in a Shared Drive (Team Drive); harmless otherwise.
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to list Google Drive folder "${id}": ${msg}. ` +
+        `Verify the folder ID is correct and shared (Viewer) with the service account.`
+    );
+  }
 
   const files = (res.data.files ?? []) as DriveFile[];
   const supported = new Set([
@@ -91,7 +119,7 @@ async function exportFileAsText(
 
   // .txt / .md → media download
   const res = await drive.files.get(
-    { fileId, alt: "media" },
+    { fileId, alt: "media", supportsAllDrives: true },
     { responseType: "text" }
   );
   return (res.data as string).trim();
@@ -112,11 +140,11 @@ function chunkText(text: string): string[] {
   let start = 0;
 
   while (start < text.length) {
-    const end = Math.min(start + CHUNK_SIZE, text.length);
-    let slice = text.slice(start, end);
+    let sliceEnd = Math.min(start + CHUNK_SIZE, text.length);
 
-    // Cut at sentence boundary unless this is the last chunk
-    if (end < text.length) {
+    // Cut at a sentence boundary unless this is the last chunk
+    if (sliceEnd < text.length) {
+      const slice = text.slice(start, sliceEnd);
       const lastSentence = Math.max(
         slice.lastIndexOf(". "),
         slice.lastIndexOf(".\n"),
@@ -124,15 +152,22 @@ function chunkText(text: string): string[] {
         slice.lastIndexOf("! ")
       );
       if (lastSentence > CHUNK_SIZE * 0.5) {
-        slice = text.slice(start, start + lastSentence + 1);
+        sliceEnd = start + lastSentence + 1;
       }
     }
 
-    chunks.push(slice.trim());
-    start += slice.length - CHUNK_OVERLAP;
+    const piece = text.slice(start, sliceEnd).trim();
+    if (piece.length > 0) chunks.push(piece);
+
+    // Stop once this chunk reached the end of the text.
+    if (sliceEnd >= text.length) break;
+
+    // Advance with overlap, but ALWAYS move forward by at least 1 char so a
+    // short tail slice (≤ CHUNK_OVERLAP) can never stall the loop forever.
+    start += Math.max(sliceEnd - start - CHUNK_OVERLAP, 1);
   }
 
-  return chunks.filter((c) => c.length > 0);
+  return chunks;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
