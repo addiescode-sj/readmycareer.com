@@ -39,10 +39,28 @@ export async function POST(req: NextRequest) {
 
     await client.close();
 
-    const contentArr = result.content as Array<{ type: string; text?: string }>;
-    const text = contentArr.find((c) => c.type === "text")?.text ?? "{}";
+    const contentArr = (result.content ?? []) as Array<{ type: string; text?: string }>;
+    const text = contentArr.find((c) => c.type === "text")?.text ?? "";
 
-    return NextResponse.json(JSON.parse(text));
+    // The MCP tool signals failure via isError and returns the message as plain
+    // text (not JSON). Surface it instead of crashing on JSON.parse.
+    if (result.isError) {
+      console.error("[/api/sync] sync-drive tool error:", text);
+      return NextResponse.json(
+        { error: text || "sync-drive tool failed" },
+        { status: 500 }
+      );
+    }
+
+    try {
+      return NextResponse.json(JSON.parse(text || "{}"));
+    } catch {
+      console.error("[/api/sync] non-JSON tool response:", text);
+      return NextResponse.json(
+        { error: text || "Empty response from sync-drive" },
+        { status: 500 }
+      );
+    }
   } catch (err) {
     console.error("[/api/sync] Error:", err);
     return NextResponse.json(
