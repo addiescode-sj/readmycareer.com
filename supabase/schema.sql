@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   display_name  TEXT,
   avatar_url    TEXT,
   locale        TEXT        NOT NULL DEFAULT 'ko' CHECK (locale IN ('ko', 'en')),
+  -- Admin accounts are granted manually in the Supabase dashboard. Defaults to a regular member.
+  is_admin      BOOLEAN     NOT NULL DEFAULT FALSE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -68,6 +70,24 @@ CREATE POLICY "profiles: owner read"
 CREATE POLICY "profiles: owner update"
   ON profiles FOR UPDATE
   USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+-- Resolves the current caller's admin status. SECURITY DEFINER + empty search_path bypasses
+-- profiles RLS (avoids policy recursion) and is safe to call from within other RLS policies.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT COALESCE(
+    (SELECT p.is_admin FROM public.profiles p WHERE p.id = auth.uid()),
+    FALSE
+  );
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.is_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
 
 -- ============================================================
 -- SECTION C: Resumes

@@ -41,6 +41,7 @@ export default async function RootLayout({
   const isDashboard = pathname.startsWith("/dashboard");
   const isLanding = pathname === "/";
   const isShare = pathname.startsWith("/share");
+  const isAdmin = pathname.startsWith("/admin");
 
   return (
     <html lang={locale}>
@@ -54,7 +55,7 @@ export default async function RootLayout({
           <AuthListener />
           {isLanding && <ParticleNetwork />}
           <Toaster position="top-center" richColors />
-          {isDashboard || isLanding || isShare ? (
+          {isDashboard || isLanding || isShare || isAdmin ? (
             <div className="relative z-10">
               {children}
             </div>

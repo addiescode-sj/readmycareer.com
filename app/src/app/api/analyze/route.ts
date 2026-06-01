@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { callMcpTool } from "@readmycareer/agents/mcp-client";
+import type { AgentRunMetric } from "@readmycareer/agents/observability";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
 const AnalyzeSchema = z.object({
@@ -10,7 +12,44 @@ const AnalyzeSchema = z.object({
   durationWeeks: z.number().int().min(1).max(24),
   startDate: z.string().min(1).max(30),
   locale: z.enum(["ko", "en"]).optional(),
+  // Optional LLM provider override for the gap-analysis stage (default: gemini).
+  provider: z.enum(["gemini", "openai"]).optional(),
 });
+
+/**
+ * Persists per-stage agent telemetry to Supabase. Best-effort and non-blocking: a failure here
+ * must never break the analysis response. Agents emit metrics; the API route owns DB I/O.
+ */
+async function persistAgentRuns(
+  metrics: AgentRunMetric[],
+  userId: string | null
+): Promise<void> {
+  if (metrics.length === 0) return;
+  try {
+    const supabase = await createServerSupabaseClient();
+    const rows = metrics.map((m) => ({
+      run_id: m.runId,
+      user_id: userId,
+      stage: m.stage,
+      provider: m.provider,
+      model: m.model,
+      latency_ms: Math.round(m.latencyMs),
+      prompt_tokens: m.promptTokens,
+      completion_tokens: m.completionTokens,
+      cached_tokens: m.cachedTokens,
+      cache_hit: m.cacheHit,
+      retry_count: m.retryCount,
+      success: m.success,
+      error_type: m.errorType ?? null,
+    }));
+    const { error } = await supabase.from("agent_runs").insert(rows);
+    if (error) {
+      console.warn("[/api/analyze] agent_runs insert failed:", error.message);
+    }
+  } catch (err: any) {
+    console.warn("[/api/analyze] agent_runs persistence error:", err?.message ?? err);
+  }
+}
 
 const MAX_BODY_BYTES = 500_000; // 500 KB — covers resumeJson + jdText + metadata
 
@@ -88,12 +127,26 @@ export async function POST(req: NextRequest) {
   // Accept-Language is only used as a fallback for clients that don't send the locale field.
   const locale = body.locale ?? detectLocale(req.headers.get("accept-language"));
 
-  const { resumeJson, targetRole, targetCompany, jdText, durationWeeks, startDate } = body;
+  const { resumeJson, targetRole, targetCompany, jdText, durationWeeks, startDate, provider } = body;
+
+  // Resolve the user (if any) up front, in request scope, for telemetry attribution.
+  // The analyze endpoint also serves anonymous visitors, so userId may be null.
+  let userId: string | null = null;
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    userId = user?.id ?? null;
+  } catch {
+    // Anonymous / no session — telemetry rows are stored with a null user_id.
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: string, data: unknown) =>
         controller.enqueue(sseChunk(event, data));
+
+      // Per-stage telemetry collected from the orchestrator and persisted after the run.
+      const metrics: AgentRunMetric[] = [];
 
       try {
         // 1. Kick off reference search + orchestrator import in PARALLEL with the rest of
@@ -131,7 +184,9 @@ export async function POST(req: NextRequest) {
             targetRole: string,
             targetCompany: string,
             onProgress?: (step: string, detail?: string) => void,
-            locale?: "ko" | "en"
+            locale?: "ko" | "en",
+            provider?: "gemini" | "openai",
+            onMetric?: (m: AgentRunMetric) => void
           ) => Promise<unknown>;
         };
 
@@ -145,7 +200,10 @@ export async function POST(req: NextRequest) {
           targetCompany,
           // onProgress → forward step key as SSE progress event; client translates
           (step) => send("progress", { step }),
-          locale
+          locale,
+          provider,
+          // onMetric → collect per-stage telemetry for post-run persistence
+          (m) => metrics.push(m)
         );
 
         // 3. Send result
@@ -154,6 +212,8 @@ export async function POST(req: NextRequest) {
         console.error("[/api/analyze]", err);
         send("error", { message: "An error occurred during analysis." });
       } finally {
+        // Persist telemetry (best-effort) before closing the stream.
+        await persistAgentRuns(metrics, userId);
         send("done", {});
         controller.close();
       }

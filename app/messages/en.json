@@ -336,5 +336,23 @@
       "medium": "Medium",
       "low": "Low"
     }
+  },
+  "AdminObservability": {
+    "title": "Agent Observability",
+    "subtitle": "Per-stage operational metrics for the agent pipeline — latency, retries, cache hits, and estimated cost.",
+    "noData": "No agent runs recorded yet. Run an analysis to populate metrics.",
+    "totalRuns": "Total runs",
+    "estCost": "Est. cost",
+    "cacheSavings": "Cache savings",
+    "tokens": "tokens",
+    "stage": "Stage",
+    "count": "Runs",
+    "failureRate": "Failure rate",
+    "avgLatency": "Avg latency",
+    "p95Latency": "p95 latency",
+    "avgRetries": "Avg retries",
+    "cacheHitRate": "Cache hit rate",
+    "totalTokens": "Total tokens",
+    "windowNote": "Aggregated over the most recent {count} agent runs."
   }
 }

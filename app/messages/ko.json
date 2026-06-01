@@ -336,5 +336,23 @@
       "medium": "보통",
       "low": "낮음"
     }
+  },
+  "AdminObservability": {
+    "title": "에이전트 옵저버빌리티",
+    "subtitle": "에이전트 파이프라인의 단계별 운영 지표 — 레이턴시, 재시도, 캐시 적중, 예상 비용.",
+    "noData": "기록된 에이전트 실행이 아직 없습니다. 분석을 실행하면 지표가 채워집니다.",
+    "totalRuns": "총 실행 수",
+    "estCost": "예상 비용",
+    "cacheSavings": "캐시 절감",
+    "tokens": "토큰",
+    "stage": "단계",
+    "count": "실행 수",
+    "failureRate": "실패율",
+    "avgLatency": "평균 레이턴시",
+    "p95Latency": "p95 레이턴시",
+    "avgRetries": "평균 재시도",
+    "cacheHitRate": "캐시 적중률",
+    "totalTokens": "총 토큰",
+    "windowNote": "최근 {count}건의 에이전트 실행을 집계한 결과입니다."
   }
 }
