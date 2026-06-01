@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-06-01
+
+### Added
+
+- **Model-provider abstraction**: a provider-agnostic `ModelAdapter` ([agents/lib/model-adapter.ts](agents/lib/model-adapter.ts)) with Gemini and OpenAI implementations. The gap-analysis stage can now run on OpenAI via the `provider` field on `POST /api/analyze` or the `MODEL_PROVIDER` env var; planning stays on Gemini to preserve the context-cache path. Documented in the new README "Model Strategy & Trade-offs" section.
+- **Agent observability**: structured per-stage telemetry (latency, token usage, cache hits, retries, success/failure) emitted as JSON logs and aggregated in-process at the orchestrator boundary ([agents/lib/observability.ts](agents/lib/observability.ts)). Per-run metrics persist to a new RLS-enabled `agent_runs` table (written by the analyze route — agents never touch the DB) and are surfaced at `/admin/observability` (avg/p95 latency, failure rate, retry rate, cache-hit rate, tokens, estimated cost, cache-token savings).
+- **Quantitative eval**: gap-analysis **recall/precision vs. labeled gaps**, run-to-run **variance** (`--repeat N`), and a **regression baseline + diff** (`--save-baseline` / `--compare-baseline`) in [eval/agent_harness.py](eval/agent_harness.py); a **Grounding / Citation Rate** with per-case source attribution in [eval/ragas_eval.py](eval/ragas_eval.py) (written to `eval/grounding_results.csv`); a **cross-model comparison** harness ([eval/model_comparison.py](eval/model_comparison.py)); and a README results-table generator ([eval/render_results.py](eval/render_results.py)) that renders the committed eval CSVs into the new "Quality & Evaluation" section.
+
+### Changed
+
+- [agents/orchestrator.ts](agents/orchestrator.ts) routes all LLM calls through the `ModelAdapter` interface instead of the inline `callGemini` helper; the context-cache logic moved into the Gemini adapter unchanged. `runCareerAnalysis` gained optional `provider` and `onMetric` parameters.
+- **Admin access control**: added an `is_admin` flag to `profiles` and a SECURITY DEFINER `public.is_admin()` helper (migration `20260601000003_add_profile_admin_role`). The `/admin/observability` page and `/api/admin/observability` route now require the admin role (non-admins are redirected / get 403) instead of merely being signed in, and `agent_runs` reads are restricted to admins via RLS. Admin accounts are granted manually in Supabase.
+
+---
+
 ## [0.5.2] - 2026-05-30
 
 ### Fixed
