@@ -168,6 +168,10 @@ agents/test-optimizer-full.mjs
 .antigravity/
 
 # Local development tools
-supabase/
 .playwright-mcp/
+
+# Supabase CLI local state only — keep supabase/migrations + schema.sql and the
+# app's supabase/ source (e.g. app/src/lib/supabase/) tracked.
+supabase/.branches/
+supabase/.temp/
 
