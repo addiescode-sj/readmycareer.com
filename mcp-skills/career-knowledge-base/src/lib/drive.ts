@@ -214,7 +214,10 @@ export async function fetchJdDocumentsFromDrive(
  *
  * @returns Total number of chunks synced
  */
-export async function syncDriveToVectorDB(): Promise<{ synced: number }> {
+export async function syncDriveToVectorDB(): Promise<{
+  synced: number;
+  by_doc_type: Record<string, number>;
+}> {
   const { upsertDocuments } = await import("./rag.js");
 
   const jdFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID_JD;
@@ -223,6 +226,27 @@ export async function syncDriveToVectorDB(): Promise<{ synced: number }> {
   if (!jdFolderId && !refFolderId) {
     throw new Error(
       "Either GOOGLE_DRIVE_FOLDER_ID_JD or GOOGLE_DRIVE_FOLDER_ID_REF is required."
+    );
+  }
+
+  // Surface misconfiguration loudly. A missing REF folder silently means the career-trend
+  // reference corpus is never labeled doc_type="reference", so reference-grounding retrieval
+  // and the corresponding eval metrics return nothing — exactly the failure mode we hit.
+  if (!refFolderId) {
+    console.warn(
+      '[sync-drive] GOOGLE_DRIVE_FOLDER_ID_REF is not set — career-trend reference documents ' +
+        'will NOT be ingested as doc_type="reference". Reference-grounding retrieval and eval ' +
+        "will stay empty until you set it and re-sync."
+    );
+  }
+  if (!jdFolderId) {
+    console.warn("[sync-drive] GOOGLE_DRIVE_FOLDER_ID_JD is not set — no JD documents will be ingested.");
+  }
+  if (jdFolderId && refFolderId && jdFolderId === refFolderId) {
+    console.warn(
+      "[sync-drive] GOOGLE_DRIVE_FOLDER_ID_JD and _REF point to the same folder — every document " +
+        "is ingested twice and the 'reference' pass overwrites the 'jd' labels (same doc_id). " +
+        "Use separate folders."
     );
   }
 
@@ -239,5 +263,13 @@ export async function syncDriveToVectorDB(): Promise<{ synced: number }> {
   }
 
   await upsertDocuments(allDocs);
-  return { synced: allDocs.length };
+
+  // Per-type breakdown so the caller can immediately verify the reference corpus was labeled.
+  const by_doc_type = allDocs.reduce<Record<string, number>>((acc, d) => {
+    acc[d.doc_type] = (acc[d.doc_type] ?? 0) + 1;
+    return acc;
+  }, {});
+  console.log(`[sync-drive] synced ${allDocs.length} chunks: ${JSON.stringify(by_doc_type)}`);
+
+  return { synced: allDocs.length, by_doc_type };
 }

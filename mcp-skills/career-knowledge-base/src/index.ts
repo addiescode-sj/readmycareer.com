@@ -146,6 +146,9 @@ server.tool(
           text: JSON.stringify({
             status: "ok",
             synced_chunks: result.synced,
+            // Per-type breakdown so a missing reference corpus (no doc_type="reference") is
+            // visible in the sync result, not just buried in logs.
+            by_doc_type: result.by_doc_type,
           }),
         },
       ],
