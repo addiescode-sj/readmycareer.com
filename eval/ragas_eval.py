@@ -69,11 +69,15 @@ except ImportError as e:
 
 # ── Client initialization ─────────────────────────────────────────────────────
 
-print("Initializing clients...")
+# RAGAS scoring LLM. Defaults to the project's standard model (proven available with the
+# project's GOOGLE_API_KEY, unlike the older gemini-2.0 line); override with EVAL_RAGAS_MODEL.
+RAGAS_LLM_MODEL = os.environ.get("EVAL_RAGAS_MODEL", "gemini-3.1-flash-lite-preview")
+
+print(f"Initializing clients (RAGAS LLM: {RAGAS_LLM_MODEL})...")
 
 llm = LangchainLLMWrapper(
     ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model=RAGAS_LLM_MODEL,
         google_api_key=GOOGLE_API_KEY,
         temperature=0,
     )
@@ -89,6 +93,12 @@ embeddings = LangchainEmbeddingsWrapper(
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index = pc.Index(PINECONE_INDEX_NAME)
 
+# Integrated index settings — must match the app's career-knowledge-base skill. The index
+# embeds text server-side (llama-text-embed-v2) and rejects client-supplied vectors, so
+# retrieval goes through index.search(inputs={"text": ...}), not index.query(vector=...).
+TEXT_FIELD = os.environ.get("PINECONE_TEXT_FIELD", "text")
+PINECONE_NAMESPACE = os.environ.get("PINECONE_NAMESPACE", "__default__")
+
 # ── RAG search functions ──────────────────────────────────────────────────────
 
 def retrieve_contexts(
@@ -100,34 +110,40 @@ def retrieve_contexts(
     Returns (contexts, matches_meta), where matches_meta carries the per-match
     metadata needed to assess reference grounding: doc_type, tags, score.
     When `doc_type` is "jd" or "reference", a metadata filter restricts retrieval
-    to that document type (mirrors the career-knowledge-base `search` tool filter).
+    to that document type (mirrors the career-knowledge-base `searchRecords` tool).
+
+    Uses integrated-inference search (server-side embedding) — the index rejects
+    client-supplied vectors, so we must NOT embed the query ourselves.
     """
-    embedding = embeddings.embed_query(query)
-    query_kwargs: dict = {
-        "vector": embedding,
-        "top_k": top_k,
-        "include_metadata": True,
-    }
-    if doc_type in ("jd", "reference"):
-        query_kwargs["filter"] = {"doc_type": {"$eq": doc_type}}
+    search_filter = (
+        {"doc_type": {"$eq": doc_type}} if doc_type in ("jd", "reference") else None
+    )
+    response = index.search(
+        namespace=PINECONE_NAMESPACE,
+        top_k=top_k,
+        inputs={"text": query},
+        filter=search_filter,
+        fields=[TEXT_FIELD, "doc_type", "title", "chunk_index", "tags"],
+    )
 
-    results = index.query(**query_kwargs)
-
+    hits = response["result"]["hits"]
     contexts: list[str] = []
     matches_meta: list[dict] = []
-    for m in results.matches:
-        meta = m.metadata or {}
-        if meta.get("text"):
-            contexts.append(meta["text"])
+    for hit in hits:
+        f = hit.get("fields", {}) or {}
+        text = f.get(TEXT_FIELD)
+        if text:
+            contexts.append(text)
         # tags are stored as a comma-joined string by the upsert pipeline
-        raw_tags = meta.get("tags", "")
+        raw_tags = f.get("tags", "")
         tags = [t for t in raw_tags.split(",") if t] if isinstance(raw_tags, str) else list(raw_tags or [])
         matches_meta.append(
             {
-                "doc_type": meta.get("doc_type", ""),
-                "title": meta.get("title", ""),
+                "doc_type": f.get("doc_type", ""),
+                "title": f.get("title", ""),
                 "tags": tags,
-                "score": getattr(m, "score", None),
+                # SDK 9 serializes hit id/score as id_/score_ in dict form.
+                "score": hit.get("score_", hit.get("_score")),
             }
         )
     return contexts, matches_meta
@@ -157,8 +173,9 @@ Answer:"""
 def build_eval_dataset(test_cases_path: str) -> tuple[Dataset, list[dict]]:
     """
     Runs the RAG pipeline over test cases from a file to build the evaluation
-    dataset. Also returns per-case grounding records used to compute the
-    Reference Grounding Rate (independent of the RAGAS metrics).
+    dataset. Also returns per-case citation records — which Pinecone sources each
+    answer is grounded in — used to compute the Grounding / Citation Rate
+    (independent of the RAGAS metrics; the retrieval-level inverse of hallucination).
     """
     with open(test_cases_path, encoding="utf-8") as f:
         test_cases = json.load(f)
@@ -166,7 +183,7 @@ def build_eval_dataset(test_cases_path: str) -> tuple[Dataset, list[dict]]:
     print(f"\nProcessing {len(test_cases)} test cases...")
 
     rows = []
-    grounding_records: list[dict] = []
+    citation_records: list[dict] = []
     for i, tc in enumerate(test_cases, 1):
         print(f"  [{i}/{len(test_cases)}] {tc['question'][:50]}...")
 
@@ -182,20 +199,30 @@ def build_eval_dataset(test_cases_path: str) -> tuple[Dataset, list[dict]]:
             "ground_truth": tc["ground_truth"],
         })
 
-        # Record grounding info only for cases that explicitly target the corpus.
+        # Citation record for EVERY case: which sources were retrieved (title, type, score).
+        # `grounded` applies only to cases that explicitly target the reference corpus.
         expected_doc_type = tc.get("expected_doc_type")
-        if expected_doc_type:
-            grounded = any(m["doc_type"] == expected_doc_type for m in matches_meta)
-            expected_tags = set(tc.get("expected_tags", []))
-            retrieved_tags = {t for m in matches_meta for t in m["tags"]}
-            grounding_records.append({
-                "category": tc.get("category", tc["question"][:40]),
-                "expected_doc_type": expected_doc_type,
-                "grounded": grounded,
-                "tag_overlap": bool(expected_tags & retrieved_tags) if expected_tags else None,
-            })
+        grounded = (
+            any(m["doc_type"] == expected_doc_type for m in matches_meta)
+            if expected_doc_type
+            else None
+        )
+        expected_tags = set(tc.get("expected_tags", []))
+        retrieved_tags = {t for m in matches_meta for t in m["tags"]}
+        cited = [m for m in matches_meta if m.get("title")]
+        citation_records.append({
+            "question": tc["question"][:60],
+            "category": tc.get("category", ""),
+            "expected_doc_type": expected_doc_type or "",
+            "grounded": grounded,
+            "num_sources": len(cited),
+            "cited_sources": "; ".join(
+                f"{m['title']} [{m['doc_type']}|{(m['score'] or 0):.2f}]" for m in cited[:3]
+            ),
+            "tag_overlap": (bool(expected_tags & retrieved_tags) if expected_tags else None),
+        })
 
-    return Dataset.from_list(rows), grounding_records
+    return Dataset.from_list(rows), citation_records
 
 # ── Evaluation execution ──────────────────────────────────────────────────────
 
@@ -206,7 +233,9 @@ def main():
 
     # Build dataset
     dataset_path = Path(__file__).parent / "eval_dataset.json"
-    dataset, grounding_records = build_eval_dataset(str(dataset_path))
+    dataset, citation_records = build_eval_dataset(str(dataset_path))
+    # Reference-targeted cases drive the grounding rate; all cases drive citation coverage.
+    grounding_records = [r for r in citation_records if r["expected_doc_type"]]
 
     print("\nRunning RAGAS evaluation (using Gemini Flash)...")
 
@@ -243,9 +272,21 @@ def main():
             all_pass = False
         print(f"  {name}: {score:.4f}  {status}")
 
-    # ── Reference Grounding (reference-corpus targeted cases only) ──────────────
+    # ── Citation coverage (all cases) ──────────────────────────────────────────
+    # Share of cases whose answer is backed by ≥1 retrieved source. A retrieval-level
+    # inverse-of-hallucination signal that complements RAGAS Faithfulness.
+    if citation_records:
+        cited = sum(1 for r in citation_records if r["num_sources"] > 0)
+        citation_rate = cited / len(citation_records)
+        print(
+            f"  Citation Coverage  (Answer has a source): {citation_rate:.4f}  "
+            f"[{cited}/{len(citation_records)} cases]"
+        )
+
+    # ── Grounding / Citation Rate (reference-corpus targeted cases only) ────────
     # Verifies that the report files synced from Google Drive (doc_type ==
-    # "reference") are actually being retrieved for the cases that need them.
+    # "reference") are actually being retrieved for the cases that need them, and
+    # surfaces the exact sources each answer is grounded in.
     REF_GROUNDING_THRESHOLD = 0.80
     if grounding_records:
         grounded = sum(1 for r in grounding_records if r["grounded"])
@@ -254,7 +295,7 @@ def main():
         if grounding_rate < REF_GROUNDING_THRESHOLD:
             all_pass = False
         print(
-            f"  Reference Grounding (Corpus Used): {grounding_rate:.4f}  {status}"
+            f"  Grounding / Citation Rate (Corpus Used): {grounding_rate:.4f}  {status}"
             f"  [{grounded}/{len(grounding_records)} cases, threshold {REF_GROUNDING_THRESHOLD}]"
         )
         for r in grounding_records:
@@ -262,21 +303,36 @@ def main():
                 "" if r["tag_overlap"] is None
                 else (" / tags ✓" if r["tag_overlap"] else " / tags ✗")
             )
+            src = f"  ← {r['cited_sources']}" if r["cited_sources"] else ""
             print(
                 f"      - {r['category']}: "
-                f"{'grounded' if r['grounded'] else 'NOT grounded'}{tag_note}"
+                f"{'grounded' if r['grounded'] else 'NOT grounded'}{tag_note}{src}"
             )
     else:
-        print("  Reference Grounding: SKIP (no reference-targeted cases in dataset)")
+        print("  Grounding / Citation Rate: SKIP (no reference-targeted cases in dataset)")
 
     print("-" * 60)
-    print(f"  Minimum Threshold: {THRESHOLD} (RAGAS) / {REF_GROUNDING_THRESHOLD} (Reference Grounding)")
+    print(f"  Minimum Threshold: {THRESHOLD} (RAGAS) / {REF_GROUNDING_THRESHOLD} (Grounding / Citation)")
     print(f"  Overall Result: {'✅ ALL PASSED' if all_pass else '❌ PARTIAL FAILURE — Improvements needed in chunking/embedding/prompting/corpus sync'}")
 
     # ── Save CSV ──────────────────────────────────────────────────────────────
     output_path = Path(__file__).parent / "ragas_results.csv"
     result.to_pandas().to_csv(output_path, index=False, encoding="utf-8-sig")
     print(f"\nDetailed results: {output_path}")
+
+    # Per-case citation/grounding records (which sources each answer used).
+    import csv as _csv
+    citation_path = Path(__file__).parent / "grounding_results.csv"
+    with open(citation_path, "w", newline="", encoding="utf-8-sig") as f:
+        fieldnames = [
+            "question", "category", "expected_doc_type",
+            "grounded", "num_sources", "cited_sources", "tag_overlap",
+        ]
+        writer = _csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in citation_records:
+            writer.writerow(r)
+    print(f"Grounding / citation records: {citation_path}")
 
     return 0 if all_pass else 1
 

@@ -162,10 +162,13 @@ can be rolled out incrementally.
   Reference Grounding section are skipped — not failed — when their inputs are
   unavailable (`--skip-llm-judge`, no reference-targeted cases).
 - Always inspect the CSVs, not just the PASS/FAIL line:
-  - `eval/agent_harness_results.csv` — per-fixture detail (now includes
-    `hidden_expectation_coverage`, `prerequisite_ordering_ok`, `contextual_depth`).
-  - `eval/ragas_results.csv` — per-case RAGAS scores; the Reference Grounding
-    breakdown is printed to stdout per case.
+  - `eval/agent_harness_results.csv` — per-fixture detail (includes `gap_recall`,
+    `gap_precision`, `hidden_expectation_coverage`, `prerequisite_ordering_ok`,
+    `contextual_depth`, `run_index`).
+  - `eval/ragas_results.csv` — per-case RAGAS scores.
+  - `eval/grounding_results.csv` — per-case citation/grounding records (which Pinecone
+    sources each answer used; `grounded` for reference-targeted cases).
+  - `eval/model_comparison.csv` — cross-model quality/latency/cost comparison.
 
 ## 7. Extending coverage
 
@@ -177,3 +180,58 @@ can be rolled out incrementally.
    where they apply.
 3. **Never** weaken a threshold in `agent_harness.py` / `ragas_eval.py` to make a
    regression pass — fix the agent, prompt, chunking, or corpus instead.
+
+---
+
+## 8. Content-accuracy, variance & regression (v0.6.0)
+
+The original quality gate validates *form* (schema, completeness, dates). These additions
+measure *content* — accuracy against labels, run-to-run stability, and regressions over time.
+
+### 8.1 Gap accuracy vs. labels (`agent_harness.py`)
+
+| Metric | What it measures | Threshold |
+|---|---|---|
+| **Gap Recall** | Labeled gap keywords (`expected_gaps_keywords`) surfaced anywhere in `gaps[]` / total labeled keywords | ≥ 50% (gated; raise as the golden set matures) |
+| **Gap Precision** | Gap items that hit ≥ 1 labeled keyword / total gap items | INFO only — labels are intentionally non-exhaustive, so this is never gated |
+
+Both are `None` (N/A, skipped) for a fixture that declares no `expected_gaps_keywords`.
+
+### 8.2 Consistency / variance — `--repeat N`
+
+Runs each fixture `N` times and reports the **stdev** of `overall_match_score`,
+`gap_faithfulness`, `gap_recall`, and `latency_s` per fixture. This quantifies the
+non-determinism the retry gate otherwise hides. Opt-in (default `N=1`) to avoid burning API
+quota on normal runs.
+
+### 8.3 Regression baseline + diff — `--save-baseline` / `--compare-baseline`
+
+`--save-baseline` snapshots the aggregate metrics to `eval/baseline.json`.
+`--compare-baseline` diffs the current run against it and **exits non-zero on regression**
+(absolute tolerance `0.05` for rate/score metrics; relative `0.20` for latency/cost). Use it
+in CI or after a prompt/model change to catch quality drops, not just hard threshold breaches.
+
+### 8.4 Grounding / Citation Rate (`ragas_eval.py`)
+
+The former *Reference Grounding Rate* is reported as the **Grounding / Citation Rate**: the
+share of reference-targeted cases whose retrieved top-K includes the expected source, plus a
+**Citation Coverage** (share of all cases whose answer is backed by ≥ 1 retrieved source). Both
+are the retrieval-level inverse of hallucination and complement RAGAS Faithfulness. Per-case
+cited sources (title, `doc_type`, score) are written to `eval/grounding_results.csv`.
+
+### 8.5 Cross-model comparison — `model_comparison.py`
+
+Runs the fixtures once per provider (`gemini`, `openai`) and compares gap recall, faithfulness,
+schema compliance, p95 latency, and cost. A provider with no API key is reported as
+`SKIPPED (no key)` — **never fabricated**. Output: `eval/model_comparison.csv`.
+
+### 8.6 Published results table — `render_results.py`
+
+Renders the committed eval CSVs into the README "Quality & Evaluation" section between the
+`<!-- EVAL:START -->` / `<!-- EVAL:END -->` markers, so the published numbers stay reproducible
+from artifacts rather than hand-maintained.
+
+> Live operational metrics (per-stage latency, retries, token/cache usage, cost) are separate
+> from this offline suite: they are recorded to the `agent_runs` table at runtime and surfaced
+> at `/admin/observability`. The cost model there mirrors `agent_harness.py` so live and offline
+> cost reconcile.

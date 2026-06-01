@@ -1,0 +1,4 @@
+﻿fixture_id,run_index,latency_s,status_code,json_parse_ok,schema_valid,schema_errors,gap_faithfulness,contextual_depth,gap_recall,gap_precision,plan_completeness,date_consistent,match_score_in_range,category_diversity_ok,project_portfolio_strength,project_plan_integration,hidden_expectation_coverage,prerequisite_ordering_ok,overall_match_score,prompt_tokens,completion_tokens,cost_usd,error
+fx_junior_frontend_fintech,0,14.146979093551636,200,True,True,[],0.7,0.4,0.5,0.6,True,True,False,False,True,False,False,True,23,2456,2206,0.000846,
+fx_python_backend_to_nodejs,0,11.387014865875244,200,True,True,[],0.7,0.4,0.75,0.6666666666666666,True,True,False,False,True,True,True,True,45,2638,1938,0.00077925,
+fx_fullstack_global_tech,0,16.650954008102417,200,True,True,[],0.4,0.7,0.0,0.0,True,True,False,True,True,False,False,True,88,2916,2911,0.0010919999999999999,

@@ -61,9 +61,13 @@ GOOGLE_API_KEY: str | None = os.environ.get("GOOGLE_API_KEY") or os.environ.get(
     "GEMINI_API_KEY"
 )
 
-# gemini-2.0-flash pricing (USD per 1M tokens, for input ≤128k)
+# Gemini Flash Lite pricing (USD per 1M tokens, for input ≤128k)
 PRICE_INPUT_PER_1M = 0.075
 PRICE_OUTPUT_PER_1M = 0.30
+
+# LLM-as-judge model. Defaults to the project's standard model (proven available with the
+# project's GOOGLE_API_KEY, unlike the older gemini-2.0 line); override with EVAL_JUDGE_MODEL.
+JUDGE_MODEL = os.environ.get("EVAL_JUDGE_MODEL", "gemini-3.1-flash-lite-preview")
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
 
@@ -77,6 +81,9 @@ THRESHOLDS: dict[str, float] = {
     "avg_cost_usd": 0.01,                      # must be below this value to PASS
     "match_score_in_range_rate": 0.80,
     "category_diversity_rate": 1.00,
+    # Content-accuracy vs. labeled gaps (expected_gaps_keywords). Gated leniently to start;
+    # raise as the golden set matures. gap_precision is reported INFO-only (labels are non-exhaustive).
+    "gap_recall": 0.50,
     "project_portfolio_strength_rate": 0.80,   # fixtures with projects must have ≥1 portfolio strength
     "project_plan_integration_rate": 0.70,     # fixtures with projects must reference a project in ≥1 todo
     # ── RAG-grounding thresholds (reference corpus must be seeded) ──────────────
@@ -319,6 +326,44 @@ def check_prerequisite_ordering(data: dict, fixture: dict) -> bool:
     return True
 
 
+def score_gap_recall_precision(
+    data: dict, fixture: dict
+) -> tuple[float | None, float | None]:
+    """
+    Content-accuracy of the gap analysis vs. the fixture's labeled gap keywords
+    (expected_gaps_keywords). This complements the form-level quality gate with a
+    label-based accuracy signal.
+
+      recall    = labeled keywords surfaced anywhere in gaps[] / total labeled keywords
+                  → the primary content-accuracy metric (gated)
+      precision = gap items that hit ≥1 labeled keyword / total gap items
+                  → a rough relevance signal. Labels are intentionally non-exhaustive
+                    (the model may surface valid gaps not in the label set), so this is
+                    reported INFO-only and never gated.
+
+    Returns (None, None) when the fixture declares no labels — the dimension is N/A.
+    """
+    expected = [k.lower() for k in fixture.get("expected_gaps_keywords", [])]
+    if not expected:
+        return None, None
+
+    gaps = data.get("gap_analysis", {}).get("gaps", [])
+    gap_texts = [
+        ((g.get("item") or "") + " " + (g.get("rationale") or "")).lower() for g in gaps
+    ]
+
+    matched_keywords = sum(1 for kw in expected if any(kw in t for t in gap_texts))
+    recall = matched_keywords / len(expected)
+
+    if gap_texts:
+        relevant_items = sum(1 for t in gap_texts if any(kw in t for kw in expected))
+        precision = relevant_items / len(gap_texts)
+    else:
+        precision = 0.0
+
+    return recall, precision
+
+
 # ── LLM-as-judge: Contextual Depth ────────────────────────────────────────────
 
 
@@ -496,6 +541,7 @@ def run_fixture(fixture: dict, client: httpx.Client, endpoint: str) -> dict:
     """
     result: dict[str, Any] = {
         "fixture_id": fixture["id"],
+        "run_index": 0,
         "latency_s": None,
         "status_code": None,
         "json_parse_ok": False,
@@ -503,6 +549,8 @@ def run_fixture(fixture: dict, client: httpx.Client, endpoint: str) -> dict:
         "schema_errors": [],
         "gap_faithfulness": None,
         "contextual_depth": None,
+        "gap_recall": None,
+        "gap_precision": None,
         "plan_completeness": False,
         "date_consistent": False,
         "match_score_in_range": False,
@@ -632,6 +680,11 @@ def run_fixture(fixture: dict, client: httpx.Client, endpoint: str) -> dict:
     result["hidden_expectation_coverage"] = check_hidden_expectations(data, fixture)
     result["prerequisite_ordering_ok"] = check_prerequisite_ordering(data, fixture)
 
+    # Content-accuracy vs. labeled gaps (None when the fixture has no labels)
+    recall, precision = score_gap_recall_precision(data, fixture)
+    result["gap_recall"] = recall
+    result["gap_precision"] = precision
+
     return result
 
 
@@ -662,6 +715,12 @@ def compute_metrics(results: list[dict]) -> dict:
         for r in successful
         if r["contextual_depth"] is not None
     ]
+    recall_scores = [
+        r["gap_recall"] for r in successful if r.get("gap_recall") is not None
+    ]
+    precision_scores = [
+        r["gap_precision"] for r in successful if r.get("gap_precision") is not None
+    ]
 
     return {
         "schema_compliance_rate": sum(1 for r in successful if r["schema_valid"]) / n,
@@ -688,6 +747,14 @@ def compute_metrics(results: list[dict]) -> dict:
             sum(1 for r in successful if r.get("match_score_in_range", False)) / len(successful)
             if successful
             else 0.0
+        ),
+        "gap_recall": (
+            sum(recall_scores) / len(recall_scores) if recall_scores else float("nan")
+        ),
+        "gap_precision": (
+            sum(precision_scores) / len(precision_scores)
+            if precision_scores
+            else float("nan")
         ),
         "category_diversity_rate": (
             sum(1 for r in successful if r.get("category_diversity_ok", False)) / len(successful)
@@ -736,13 +803,16 @@ def _fmt_nan(v: float, fmt: str) -> str:
     return "N/A (--skip-llm-judge)" if math.isnan(v) else format(v, fmt)
 
 
-def print_summary(metrics: dict, all_pass: bool) -> None:
-    print()
-    print("=" * 72)
-    print("  readmycareer.com — Agent Output Quality Evaluation")
-    print("=" * 72)
+def _summary_rows(metrics: dict) -> list[list[str]]:
+    """Builds the [Metric, Score, Threshold, Status] rows shared by the console
+    summary (print_summary) and the Markdown report (save_markdown_report), so the
+    two presentations can never drift apart."""
+    import math
 
-    rows = [
+    def _pct(v: float) -> str:
+        return "N/A" if (isinstance(v, float) and math.isnan(v)) else f"{v:.2%}"
+
+    return [
         [
             "Schema Compliance Rate",
             f"{metrics['schema_compliance_rate']:.2%}",
@@ -802,6 +872,22 @@ def print_summary(metrics: dict, all_pass: bool) -> None:
             _pass_fail(metrics["match_score_in_range_rate"] >= THRESHOLDS["match_score_in_range_rate"]),
         ],
         [
+            "Gap Recall (vs labels)",
+            _pct(metrics["gap_recall"]),
+            f">= {THRESHOLDS['gap_recall']:.0%}",
+            (
+                "SKIP"
+                if math.isnan(metrics["gap_recall"])
+                else _pass_fail(metrics["gap_recall"] >= THRESHOLDS["gap_recall"])
+            ),
+        ],
+        [
+            "Gap Precision (INFO)",
+            _pct(metrics["gap_precision"]),
+            "—",
+            "INFO",
+        ],
+        [
             "Category Diversity (>=3 dims)",
             f"{metrics['category_diversity_rate']:.2%}",
             "= 100%",
@@ -843,6 +929,14 @@ def print_summary(metrics: dict, all_pass: bool) -> None:
         ],
     ]
 
+
+def print_summary(metrics: dict, all_pass: bool) -> None:
+    print()
+    print("=" * 72)
+    print("  readmycareer.com — Agent Output Quality Evaluation")
+    print("=" * 72)
+
+    rows = _summary_rows(metrics)
     print(
         tabulate(
             rows,
@@ -876,6 +970,132 @@ def save_csv(results: list[dict], output_path: Path) -> None:
             writer.writerow({k: v for k, v in r.items() if k in fieldnames})
 
 
+# ── Markdown report ─────────────────────────────────────────────────────────
+# Human-readable companion to the CSV: an aggregate table, a per-fixture table,
+# and a glossary explaining what every metric means and why it is gated. Written
+# to documents/ on every run so the scores are reviewable without a spreadsheet.
+
+# Glossary text is static (the metric definitions live in the scoring functions
+# above); keep it in sync when a metric is added or its threshold rationale changes.
+_METRIC_GLOSSARY = """\
+| Metric | Gate | What it measures |
+| --- | --- | --- |
+| **Schema Compliance Rate** | ≥ 95% | Share of responses whose JSON validates against the `CareerPlanOutput` schema (`gap_analysis` + `weeks` with all required fields). Structural validity of the agent output. |
+| **JSON Parse Error Rate** | < 5% | Share of requests whose body could not be parsed as valid JSON at all (`1 − successful/total`). Lower is better. |
+| **Gap Faithfulness** (LLM-judge) | ≥ 0.70 | An LLM judge scores 0–1 whether each identified gap is grounded in the JD/résumé evidence rather than hallucinated. Shows `SKIP` when run with `--skip-llm-judge`. |
+| **Plan Completeness Rate** | ≥ 90% | Share of plans in which **every** week contains at least 3 todos. |
+| **Date Consistency Rate** | = 100% | Share of plans whose weekly date ranges are continuous in time (end ≥ start, and each week starts within 2 days of the previous week's end). |
+| **p50 / p95 Latency** | p95 < 30s | Median / 95th-percentile end-to-end response time of `/api/analyze`. p50 is INFO only. |
+| **Avg Cost / Request** | < $0.01 | Estimated USD per request from prompt + completion tokens at Gemini Flash Lite pricing ($0.075 / $0.30 per 1M input / output). |
+| **Match Score In Range** | ≥ 80% | Share of fixtures whose `gap_analysis.overall_match_score` lands inside the fixture's expected range — catches the model systematically over- or under-rating fit. |
+| **Gap Recall** (vs labels) | ≥ 50% | Of the gap keywords labeled for a fixture (`expected_gaps_keywords`), the share the analysis actually surfaced (case-insensitive substring match across each gap's `item` + `rationale`). Content accuracy against the golden set. |
+| **Gap Precision** | INFO | Of the gaps the model surfaced, the share that hit ≥ 1 labeled keyword. INFO-only and never gated because labels are intentionally non-exhaustive (a valid gap outside the label set would look like a false positive). |
+| **Category Diversity** (≥ 3 dims) | = 100% | Whether gaps + strengths together span ≥ 3 distinct categories (`skill` / `experience` / `certification` / `portfolio` / `keyword`), plus any categories the fixture explicitly expects. Guards against one-dimensional analysis. |
+| **Project Portfolio Strength** | ≥ 80% | For fixtures whose résumé has projects, whether the analysis surfaces ≥ 1 `portfolio`-category strength (fixtures without projects auto-pass). |
+| **Project Plan Integration** | ≥ 70% | For fixtures with projects, whether ≥ 1 weekly todo references an existing project name by case-insensitive substring (the plan should build on what the candidate already has). |
+| **Hidden Expectation Coverage** | ≥ 66% | Whether the analysis surfaces ≥ 1 **implicit**, non-JD-literal expectation the reference corpus ties to the role/tier (README gap area #2). A RAG-grounding metric — needs the reference corpus seeded. |
+| **Prerequisite Ordering** | = 100% | Whether no foundational gap is ranked below an advanced gap that depends on it, for each `[before, after]` pair the fixture declares (rank = priority weight, then array index). README gap area #5. |
+| **Contextual Depth** (LLM-judge) | ≥ 0.70 | An LLM judge scores 0–1 the holistic depth beyond keyword matching — skill transferability, company-stage/tier fit, and market relevance (README gap areas #1 / #3 / #4). Shows `SKIP` under `--skip-llm-judge`. |
+
+**Status legend:** `PASS` / `FAIL` against the gate · `INFO` = reported but not gated · `SKIP` = LLM-judge metric not computed (`--skip-llm-judge`).
+"""
+
+
+def _fmt_cell(value: Any, kind: str) -> str:
+    """Formats one per-fixture cell for the Markdown table; None renders as an em dash."""
+    if value is None:
+        return "—"
+    if kind == "bool":
+        return "✓" if value else "✗"
+    if kind == "latency":
+        return f"{float(value):.1f}s"
+    if kind == "cost":
+        return f"${float(value):.4f}"
+    if kind == "float":
+        return f"{float(value):.2f}"
+    return str(value)
+
+
+def save_markdown_report(
+    results: list[dict],
+    metrics: dict,
+    all_pass: bool,
+    md_path: Path,
+) -> None:
+    """Renders a human-readable Markdown report (aggregate table + per-fixture table +
+    metric glossary) next to the CSV. Regenerated on every harness run that produces
+    results, so the scores stay reviewable without opening a spreadsheet."""
+    if not results:
+        return
+
+    summary_md = tabulate(
+        _summary_rows(metrics),
+        headers=["Metric", "Score", "Threshold", "Status"],
+        tablefmt="github",
+    )
+
+    per_fixture_headers = [
+        "Fixture", "Latency", "Schema", "Faithfulness", "Depth",
+        "Recall", "Plan ≥3", "Dates", "Hidden Exp.", "Match", "Cost",
+    ]
+    per_fixture_rows = [
+        [
+            r.get("fixture_id", "—"),
+            _fmt_cell(r.get("latency_s"), "latency"),
+            _fmt_cell(r.get("schema_valid"), "bool"),
+            _fmt_cell(r.get("gap_faithfulness"), "float"),
+            _fmt_cell(r.get("contextual_depth"), "float"),
+            _fmt_cell(r.get("gap_recall"), "float"),
+            _fmt_cell(r.get("plan_completeness"), "bool"),
+            _fmt_cell(r.get("date_consistent"), "bool"),
+            _fmt_cell(r.get("hidden_expectation_coverage"), "bool"),
+            _fmt_cell(r.get("overall_match_score"), "raw"),
+            _fmt_cell(r.get("cost_usd"), "cost"),
+        ]
+        for r in results
+    ]
+    per_fixture_md = tabulate(
+        per_fixture_rows, headers=per_fixture_headers, tablefmt="github"
+    )
+
+    generated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    overall = (
+        "✅ **PASS** — all gated thresholds met"
+        if all_pass
+        else "❌ **FAIL** — one or more gated metrics below threshold"
+    )
+
+    content = f"""# Agent Output Quality Report
+
+> **Auto-generated** by `eval/agent_harness.py` on every run — do not edit by hand.
+> Raw per-case data lives in [`eval/agent_harness_results.csv`](../eval/agent_harness_results.csv).
+> To refresh: run `pnpm dev`, then `pnpm eval:agents` (or `pnpm eval`).
+
+- **Generated:** {generated}
+- **Result:** {overall}
+- **Fixtures:** {metrics['successful_fixtures']}/{metrics['total_fixtures']} successful
+- **LLM-judge model:** `{JUDGE_MODEL}`
+
+## Aggregate Metrics
+
+{summary_md}
+
+## Per-Fixture Scores
+
+{per_fixture_md}
+
+Legend: ✓ / ✗ = pass / fail per fixture · Faithfulness & Depth = LLM-judge (0–1) ·
+Recall = vs labeled gaps (0–1) · Match = `overall_match_score` (0–100).
+
+## What Each Metric Means
+
+{_METRIC_GLOSSARY}
+"""
+
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text(content, encoding="utf-8")
+
+
 # ── Overall pass/fail judgment ────────────────────────────────────────────────
 
 
@@ -896,12 +1116,171 @@ def all_thresholds_met(metrics: dict) -> bool:
         metrics["hidden_expectation_coverage_rate"] >= THRESHOLDS["hidden_expectation_coverage_rate"],
         metrics["prerequisite_ordering_rate"] >= THRESHOLDS["prerequisite_ordering_rate"],
     ]
+    # gap_recall is NaN only when no fixture declares labels; skip the gate in that case.
+    if not math.isnan(metrics.get("gap_recall", float("nan"))):
+        checks.append(metrics["gap_recall"] >= THRESHOLDS["gap_recall"])
     # LLM-judge metrics: skip check if NaN (judge was skipped)
     if not math.isnan(metrics["gap_faithfulness"]):
         checks.append(metrics["gap_faithfulness"] >= THRESHOLDS["gap_faithfulness"])
     if not math.isnan(metrics["contextual_depth"]):
         checks.append(metrics["contextual_depth"] >= THRESHOLDS["contextual_depth"])
     return all(checks)
+
+
+# ── Consistency / variance ────────────────────────────────────────────────────
+
+
+def compute_consistency(results: list[dict]) -> list[dict]:
+    """Per-fixture stdev across repeated runs — quantifies the non-determinism the
+    retry gate otherwise hides. Returns [] unless at least one fixture ran ≥2 times."""
+    import statistics
+
+    by_fixture: dict[str, list[dict]] = {}
+    for r in results:
+        by_fixture.setdefault(r["fixture_id"], []).append(r)
+
+    rows: list[dict] = []
+    for fid, runs in by_fixture.items():
+        if len(runs) < 2:
+            continue
+
+        def stdev_of(key: str) -> float:
+            vals = [r[key] for r in runs if r.get(key) is not None]
+            return statistics.stdev(vals) if len(vals) >= 2 else 0.0
+
+        rows.append(
+            {
+                "fixture_id": fid,
+                "runs": len(runs),
+                "match_score_stdev": stdev_of("overall_match_score"),
+                "gap_faithfulness_stdev": stdev_of("gap_faithfulness"),
+                "gap_recall_stdev": stdev_of("gap_recall"),
+                "latency_stdev": stdev_of("latency_s"),
+            }
+        )
+    return rows
+
+
+def print_consistency(rows: list[dict]) -> None:
+    if not rows:
+        return
+    print("\n" + "=" * 72)
+    print("  Consistency / Variance (stdev across repeated runs)")
+    print("=" * 72)
+    table = [
+        [
+            r["fixture_id"],
+            r["runs"],
+            f"{r['match_score_stdev']:.2f}",
+            f"{r['gap_faithfulness_stdev']:.3f}",
+            f"{r['gap_recall_stdev']:.3f}",
+            f"{r['latency_stdev']:.2f}s",
+        ]
+        for r in rows
+    ]
+    print(
+        tabulate(
+            table,
+            headers=["Fixture", "Runs", "MatchScore σ", "Faithfulness σ", "Recall σ", "Latency σ"],
+            tablefmt="simple",
+        )
+    )
+    print("=" * 72)
+
+
+# ── Regression baseline + diff ──────────────────────────────────────────────────
+
+BASELINE_PATH = Path(__file__).parent / "baseline.json"
+
+# Metrics tracked in the regression baseline: (metric_key, higher_is_better).
+BASELINE_METRICS: list[tuple[str, bool]] = [
+    ("schema_compliance_rate", True),
+    ("json_parse_error_rate", False),
+    ("gap_faithfulness", True),
+    ("gap_recall", True),
+    ("plan_completeness_rate", True),
+    ("date_consistency_rate", True),
+    ("p95_latency_s", False),
+    ("avg_cost_usd", False),
+    ("match_score_in_range_rate", True),
+    ("hidden_expectation_coverage_rate", True),
+    ("prerequisite_ordering_rate", True),
+    ("contextual_depth", True),
+]
+
+REGRESSION_ABS_TOL = 0.05  # absolute tolerance for rate/score metrics (0–1 scale)
+REGRESSION_REL_TOL = 0.20  # relative tolerance for latency / cost metrics
+
+
+def _baseline_value(v: Any) -> Any:
+    import math
+
+    if isinstance(v, float) and math.isnan(v):
+        return None
+    return v
+
+
+def save_baseline(metrics: dict, path: Path) -> None:
+    snapshot = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "metrics": {k: _baseline_value(metrics.get(k)) for k, _ in BASELINE_METRICS},
+    }
+    path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+    print(f"\n[baseline] Saved baseline snapshot → {path}")
+
+
+def _fmt_val(v: Any) -> str:
+    if v is None:
+        return "—"
+    if isinstance(v, float):
+        return f"{v:.4f}"
+    return str(v)
+
+
+def compare_baseline(metrics: dict, path: Path) -> bool:
+    """Diffs current metrics vs. the saved baseline. Returns True when no regression."""
+    import math
+
+    if not path.exists():
+        print(f"\n[baseline] No baseline at {path} — run with --save-baseline first.")
+        return True
+
+    baseline = json.loads(path.read_text(encoding="utf-8"))
+    base_metrics = baseline.get("metrics", {})
+    rows: list[list[str]] = []
+    regressed = False
+
+    for key, higher_is_better in BASELINE_METRICS:
+        cur = metrics.get(key)
+        base = base_metrics.get(key)
+        if (
+            cur is None
+            or (isinstance(cur, float) and math.isnan(cur))
+            or base is None
+        ):
+            rows.append([key, _fmt_val(base), _fmt_val(cur), "—", "SKIP"])
+            continue
+
+        delta = cur - base
+        tol = abs(base) * REGRESSION_REL_TOL if key in ("p95_latency_s", "avg_cost_usd") else REGRESSION_ABS_TOL
+        is_regression = (delta < -tol) if higher_is_better else (delta > tol)
+        improved = (delta > tol) if higher_is_better else (delta < -tol)
+        status = "REGRESSED" if is_regression else ("improved" if improved else "ok")
+        if is_regression:
+            regressed = True
+        rows.append([key, _fmt_val(base), _fmt_val(cur), f"{delta:+.4f}", status])
+
+    print("\n" + "=" * 72)
+    print(f"  Regression diff vs baseline ({baseline.get('generated_at', '?')})")
+    print("=" * 72)
+    print(tabulate(rows, headers=["Metric", "Baseline", "Current", "Δ", "Status"], tablefmt="simple"))
+    print("=" * 72)
+    print(
+        "REGRESSION DETECTED — one or more metrics dropped beyond tolerance."
+        if regressed
+        else "No regressions beyond tolerance."
+    )
+    return not regressed
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -930,7 +1309,24 @@ def main() -> int:
         default=str(Path(__file__).parent / "fixtures" / "agent_fixtures.json"),
         help="Path to the fixture file",
     )
+    parser.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="Run each fixture N times and report output variance (default: 1)",
+    )
+    parser.add_argument(
+        "--save-baseline",
+        action="store_true",
+        help="Save the aggregate metrics as the regression baseline (eval/baseline.json)",
+    )
+    parser.add_argument(
+        "--compare-baseline",
+        action="store_true",
+        help="Diff aggregate metrics against eval/baseline.json; fail on regression",
+    )
     args = parser.parse_args()
+    repeat = max(1, args.repeat)
 
     endpoint = f"{args.base_url}/api/analyze"
 
@@ -947,7 +1343,7 @@ def main() -> int:
             import google.generativeai as genai
 
             genai.configure(api_key=GOOGLE_API_KEY)
-            llm_model = genai.GenerativeModel("gemini-2.0-flash-lite")
+            llm_model = genai.GenerativeModel(JUDGE_MODEL)
         except ImportError:
             print(
                 "ERROR: google-generativeai package is not installed.\n"
@@ -963,66 +1359,93 @@ def main() -> int:
     fixtures: list[dict] = json.loads(fixtures_path.read_text(encoding="utf-8"))
     print(f"\nLoaded {len(fixtures)} fixtures: {fixtures_path}")
     print(f"Endpoint: {endpoint}")
-    print(f"Timeout: {args.timeout}s | LLM judge: {'OFF' if args.skip_llm_judge else 'ON'}")
+    judge_status = "OFF" if args.skip_llm_judge else f"ON ({JUDGE_MODEL})"
+    print(f"Timeout: {args.timeout}s | LLM judge: {judge_status}")
     print()
 
     results: list[dict] = []
 
-    with httpx.Client(timeout=args.timeout) as client:
-        for i, fixture in enumerate(fixtures, 1):
-            print(f"[{i}/{len(fixtures)}] {fixture['id']}")
-            print(f"  → {fixture['description']}")
+    def process_one(fixture: dict, i: int, client: httpx.Client) -> dict:
+        """Runs a single fixture: analyze + LLM judge + cost estimate, with progress prints."""
+        print(f"[{i}/{len(fixtures)}] {fixture['id']}")
+        print(f"  → {fixture['description']}")
 
-            result = run_fixture(fixture, client, endpoint)
+        result = run_fixture(fixture, client, endpoint)
 
-            if result.get("error"):
-                print(f"  ✗ Error: {result['error']}")
-            else:
-                status_icon = "✓" if result["json_parse_ok"] else "✗"
-                schema_status = "Valid" if result["schema_valid"] else f"Error ({len(result['schema_errors'])} errors)"
-                print(
-                    f"  {status_icon} HTTP {result['status_code']} | "
-                    f"{result['latency_s']:.1f}s | "
-                    f"Schema: {schema_status} | "
-                    f"todos/week>=3: {result['plan_completeness']} | "
-                    f"Date continuity: {result['date_consistent']} | "
-                    f"Score in range: {result.get('match_score_in_range', 'N/A')} | "
-                    f"Category diversity: {result.get('category_diversity_ok', 'N/A')}"
+        if result.get("error"):
+            print(f"  ✗ Error: {result['error']}")
+        else:
+            status_icon = "✓" if result["json_parse_ok"] else "✗"
+            schema_status = "Valid" if result["schema_valid"] else f"Error ({len(result['schema_errors'])} errors)"
+            print(
+                f"  {status_icon} HTTP {result['status_code']} | "
+                f"{result['latency_s']:.1f}s | "
+                f"Schema: {schema_status} | "
+                f"todos/week>=3: {result['plan_completeness']} | "
+                f"Date continuity: {result['date_consistent']} | "
+                f"Score in range: {result.get('match_score_in_range', 'N/A')} | "
+                f"Gap recall: {result.get('gap_recall', 'N/A')}"
+            )
+
+            # LLM-as-judge
+            if result["json_parse_ok"] and llm_model is not None:
+                print("  → LLM judging faithfulness...", end="", flush=True)
+                result["gap_faithfulness"] = judge_gap_faithfulness(
+                    fixture, result["response_json"], llm_model
                 )
+                print(f" {result['gap_faithfulness']:.2f}")
+                print("  → LLM judging contextual depth...", end="", flush=True)
+                result["contextual_depth"] = judge_contextual_depth(
+                    fixture, result["response_json"], llm_model
+                )
+                print(f" {result['contextual_depth']:.2f}")
 
-                # LLM-as-judge
-                if result["json_parse_ok"] and llm_model is not None:
-                    print("  → LLM judging faithfulness...", end="", flush=True)
-                    result["gap_faithfulness"] = judge_gap_faithfulness(
-                        fixture, result["response_json"], llm_model
-                    )
-                    print(f" {result['gap_faithfulness']:.2f}")
-                    print("  → LLM judging contextual depth...", end="", flush=True)
-                    result["contextual_depth"] = judge_contextual_depth(
-                        fixture, result["response_json"], llm_model
-                    )
-                    print(f" {result['contextual_depth']:.2f}")
+        # Cost estimation
+        pt, ct, cost = estimate_cost(fixture, result.get("response_json"))
+        result["prompt_tokens"] = pt
+        result["completion_tokens"] = ct
+        result["cost_usd"] = cost
+        print()
+        return result
 
-            # Cost estimation
-            pt, ct, cost = estimate_cost(fixture, result.get("response_json"))
-            result["prompt_tokens"] = pt
-            result["completion_tokens"] = ct
-            result["cost_usd"] = cost
-
-            results.append(result)
-            print()
+    with httpx.Client(timeout=args.timeout) as client:
+        for run_idx in range(repeat):
+            if repeat > 1:
+                print(f"\n────── Repeat run {run_idx + 1}/{repeat} ──────")
+            for i, fixture in enumerate(fixtures, 1):
+                result = process_one(fixture, i, client)
+                result["run_index"] = run_idx
+                results.append(result)
 
     # Aggregate and print results
     metrics = compute_metrics(results)
     passed = all_thresholds_met(metrics)
     print_summary(metrics, passed)
 
+    # Consistency report (only meaningful with --repeat > 1)
+    if repeat > 1:
+        print_consistency(compute_consistency(results))
+
     # Save CSV
     output_path = Path(__file__).parent / "agent_harness_results.csv"
     save_csv(results, output_path)
     print(f"\nDetailed results saved to: {output_path}")
 
-    return 0 if passed else 1
+    # Render the human-readable Markdown companion alongside the CSV.
+    report_path = (
+        Path(__file__).parent.parent / "documents" / "agent-eval-report.md"
+    )
+    save_markdown_report(results, metrics, passed, report_path)
+    print(f"Markdown report saved to:   {report_path}")
+
+    # Regression baseline handling
+    if args.save_baseline:
+        save_baseline(metrics, BASELINE_PATH)
+    no_regression = True
+    if args.compare_baseline:
+        no_regression = compare_baseline(metrics, BASELINE_PATH)
+
+    return 0 if (passed and no_regression) else 1
 
 
 if __name__ == "__main__":
