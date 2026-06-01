@@ -53,7 +53,9 @@ Detailed I/O specs, constraints, and architecture notes for each agent and MCP s
 - **MCP runtime**: `@modelcontextprotocol/sdk`
 - **Schema validation**: Zod at every agent I/O boundary
 - **Language**: TypeScript ESM, Node ≥ 20
-- **LLM model**: `gemini-3.1-flash-lite-preview` (all agents and MCP skills)
+- **LLM model**: `gemini-3.1-flash-lite-preview` by default (all agents and MCP skills)
+- **Model calls go through the `ModelAdapter` interface** (`agents/lib/model-adapter.ts`) — never construct a provider SDK client inside an agent or the orchestrator. Gemini is the default; the gap-analysis stage is provider-swappable (`provider` arg / `MODEL_PROVIDER` env) via `agents/lib/adapters/`. To add a provider, implement `ModelAdapter` and register it in the `getModelAdapter` factory.
+- **Observability**: the orchestrator records per-stage telemetry through `agents/lib/observability.ts` and forwards each metric via the `onMetric` callback. Agents stay free of telemetry/DB concerns; the API route persists metrics to `agent_runs`.
 - All agent I/O types must be defined in `agents/types.ts`
 - MCP skills are called via `callMcpTool()` in `agents/lib/mcp-client.ts` — never spawned directly
 - Agents must not access Supabase, Pinecone, or the file system directly; all external access goes through MCP tool calls or is handled in the API route layer

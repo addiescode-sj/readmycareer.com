@@ -1,6 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { GoogleAICacheManager } from "@google/generative-ai/server";
-import { createHash } from "crypto";
+import { randomUUID } from "crypto";
 import {
   Runner,
   InMemorySessionService,
@@ -11,6 +9,15 @@ import { ChatQnAAgent } from "./chat-qna/index.js";
 import { getGapAnalyzerInstruction } from "./gap-analyzer/index.js";
 import { PLANNER_INSTRUCTION } from "./planner/index.js";
 import { runResumeOptimizer as _runResumeOptimizer } from "./resume-optimizer/index.js";
+import {
+  getModelAdapter,
+  ModelAdapter,
+  ModelProvider,
+  LlmUsage,
+  LlmResult,
+  ZERO_USAGE,
+} from "./lib/model-adapter.js";
+import { AgentRunMetric, AgentStage, recordAgentRun } from "./lib/observability.js";
 import {
   SESSION_KEYS,
   ResumeJson,
@@ -23,8 +30,8 @@ import {
 } from "./types.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
-const MODEL_NAME = "gemini-3.1-flash-lite-preview";
+// LLM provider details (model name, API retries, timeout, context-cache TTL) now live in
+// the provider adapters under ./lib/adapters. The orchestrator stays provider-agnostic.
 
 /** Applies the same thresholds as harness-eval.md at runtime */
 const QUALITY_THRESHOLDS = {
@@ -34,201 +41,6 @@ const QUALITY_THRESHOLDS = {
 
 /** Max retry attempts when quality criteria are not met (total attempts = 1 + MAX_QUALITY_RETRIES) */
 const MAX_QUALITY_RETRIES = 2;
-
-/** Max retry attempts for API 429/5xx errors */
-const MAX_API_RETRIES = 3;
-
-/** Overall wall-clock timeout per Gemini generateContent call (ms). Guards against hung connections. */
-const GEMINI_CALL_TIMEOUT_MS = 30_000;
-
-/** Context cache TTL in seconds. Reuses the cache for re-analysis requests with the same resume. */
-const CACHE_TTL_SECONDS = 3600; // 1 hour
-
-/** Silently ignores cache creation failures (e.g., insufficient token count) and proceeds without caching */
-const CACHE_FALLBACK_ON_ERROR = true;
-
-// ── Context cache registry ────────────────────────────────────────────────────
-// Key: SHA-256(systemInstruction + resumeJson)
-// Value: { cacheName, expiresAt }
-// Avoids re-billing input tokens when the same resume is re-analyzed.
-
-const cacheRegistry = new Map<string, { cacheName: string; expiresAt: number }>();
-// In-flight cache creations (deduplicates concurrent createCache calls for the same key)
-const inFlightCacheCreations = new Map<string, Promise<string | null>>();
-
-function hashResume(systemInstruction: string, resumeJson: unknown): string {
-  return createHash("sha256")
-    .update(systemInstruction + JSON.stringify(resumeJson))
-    .digest("hex")
-    .slice(0, 32);
-}
-
-async function getOrCreateResumeCache(
-  apiKey: string,
-  systemInstruction: string,
-  resumeJson: unknown
-): Promise<string | null> {
-  const key = hashResume(systemInstruction, resumeJson);
-
-  // Deduplicate concurrent creations for the same key — without this, the two
-  // parallel cache warm-ups in runCareerAnalysis would both create caches.
-  const inFlight = inFlightCacheCreations.get(key);
-  if (inFlight) return inFlight;
-  const now = Date.now();
-  const cached = cacheRegistry.get(key);
-
-  if (cached && cached.expiresAt > now) {
-    console.log("[CACHE] Resume cache HIT →", cached.cacheName);
-    return cached.cacheName;
-  }
-
-  const creation = (async () => {
-  try {
-    const cacheManager = new GoogleAICacheManager(apiKey);
-    const cache = await cacheManager.create({
-      model: MODEL_NAME,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: `[Resume data — use this for analysis]\n${JSON.stringify(resumeJson, null, 2)}`,
-            },
-          ],
-        },
-        {
-          role: "model",
-          parts: [{ text: "Resume data confirmed. Ready to begin analysis." }],
-        },
-      ],
-      systemInstruction: systemInstruction,
-      ttlSeconds: CACHE_TTL_SECONDS,
-      displayName: `resume-${key.slice(0, 8)}`,
-    });
-
-    cacheRegistry.set(key, {
-      cacheName: cache.name!,
-      expiresAt: now + (CACHE_TTL_SECONDS - 60) * 1000, // 60-second buffer
-    });
-
-    console.log("[CACHE] Resume cache created →", cache.name);
-    return cache.name || null;
-  } catch (err: any) {
-    if (CACHE_FALLBACK_ON_ERROR) {
-      console.warn("[CACHE] Cache creation failed (proceeding without cache):", err?.message ?? err);
-      return null;
-    }
-    throw err;
-  }
-  })();
-
-  inFlightCacheCreations.set(key, creation);
-  try {
-    return await creation;
-  } finally {
-    inFlightCacheCreations.delete(key);
-  }
-}
-
-// ── Exponential backoff ───────────────────────────────────────────────────────
-
-function exponentialDelay(attempt: number, baseMs = 2000, maxMs = 60_000): number {
-  // 2^attempt * baseMs + jitter (0~1000ms)
-  const delay = Math.min(baseMs * Math.pow(2, attempt) + Math.random() * 1000, maxMs);
-  return delay;
-}
-
-// ── Gemini SDK call (API retry + response extraction) ─────────────────────────
-
-interface CallGeminiOptions {
-  apiKey: string;
-  systemInstruction: string;
-  userPrompt: string;
-  cachedContentName?: string | null;
-  maxOutputTokens?: number;
-  temperature?: number;
-  topP?: number;
-}
-
-async function callGemini(opts: CallGeminiOptions): Promise<string | null> {
-  const {
-    apiKey,
-    systemInstruction,
-    userPrompt,
-    cachedContentName,
-    maxOutputTokens = 8192,
-    // Low temperature: prevents the model from dropping confirmed skill matches.
-    // topP 0.85: retains semantic flexibility for abbreviation/synonym matching.
-    temperature = 0.2,
-    topP = 0.85,
-  } = opts;
-  const genai = new GoogleGenerativeAI(apiKey);
-
-  for (let attempt = 0; attempt < MAX_API_RETRIES; attempt++) {
-    try {
-      let result: any;
-
-      const generationConfig = {
-        responseMimeType: "application/json",
-        maxOutputTokens,
-        temperature,
-        topP,
-      };
-
-      const generate = cachedContentName
-        ? genai
-            .getGenerativeModel({ model: MODEL_NAME })
-            .generateContent({
-              contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-              cachedContent: cachedContentName,
-              generationConfig,
-            } as any)
-        : genai
-            .getGenerativeModel({ model: MODEL_NAME, systemInstruction })
-            .generateContent({
-              contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-              generationConfig,
-            });
-
-      // Wall-clock timeout — protects against hung connections that would otherwise
-      // block the SSE stream until the client disconnects.
-      result = await Promise.race([
-        generate,
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error(`Gemini call exceeded ${GEMINI_CALL_TIMEOUT_MS}ms`)),
-            GEMINI_CALL_TIMEOUT_MS
-          )
-        ),
-      ]);
-
-      const text = result.response.text();
-      const usage = result.response.usageMetadata;
-      if (usage) {
-        console.log(
-          `[GEMINI] Token usage: input=${usage.promptTokenCount}, output=${usage.candidatesTokenCount}, cache=${usage.cachedContentTokenCount ?? 0}`
-        );
-      }
-      return text;
-    } catch (err: any) {
-      const status: number = err?.status ?? err?.statusCode ?? 0;
-      const isRetryable = status === 429 || status >= 500;
-
-      if (isRetryable && attempt < MAX_API_RETRIES - 1) {
-        const delay = exponentialDelay(attempt);
-        console.warn(
-          `[GEMINI] HTTP ${status} — retrying in ${Math.round(delay / 1000)}s (${attempt + 1}/${MAX_API_RETRIES - 1})`
-        );
-        await new Promise((r) => setTimeout(r, delay));
-        continue;
-      }
-
-      console.error("[GEMINI] Call failed:", err?.message ?? err);
-      return null;
-    }
-  }
-  return null;
-}
 
 // ── Quality validator ─────────────────────────────────────────────────────────
 // Applies the same thresholds from harness-eval.md (Schema Compliance, Plan Completeness,
@@ -335,15 +147,45 @@ function validateCareerPlan(
 // ── Quality gate retry loop ───────────────────────────────────────────────────
 // Re-runs the agent until harness-eval.md thresholds are satisfied.
 // On retry, the previous error list is injected into the prompt to guide self-correction.
+// Token usage is accumulated across attempts so the caller can record honest cost telemetry.
+
+interface QualityGateResult<T> {
+  data: T;
+  attempts: number;
+  usage: LlmUsage;
+}
+
+/** Thrown when a stage fails all attempts; carries accumulated telemetry for failure metrics. */
+class QualityGateError extends Error {
+  attempts: number;
+  usage: LlmUsage;
+  constructor(message: string, attempts: number, usage: LlmUsage) {
+    super(message);
+    this.name = "QualityGateError";
+    this.attempts = attempts;
+    this.usage = usage;
+  }
+}
+
+function addUsage(a: LlmUsage, b: LlmUsage): LlmUsage {
+  return {
+    promptTokens: a.promptTokens + b.promptTokens,
+    completionTokens: a.completionTokens + b.completionTokens,
+    cachedTokens: a.cachedTokens + b.cachedTokens,
+  };
+}
 
 async function runWithQualityGate<T>(
-  callFn: (retryFeedback: string) => Promise<string | null>,
+  callFn: (retryFeedback: string) => Promise<LlmResult>,
   validateFn: (parsed: unknown) => { valid: boolean; errors: string[] },
   label: string
-): Promise<T> {
+): Promise<QualityGateResult<T>> {
   let lastErrors: string[] = [];
+  let usage: LlmUsage = { ...ZERO_USAGE };
+  let attempts = 0;
 
   for (let attempt = 0; attempt <= MAX_QUALITY_RETRIES; attempt++) {
+    attempts = attempt + 1;
     if (attempt > 0) {
       const waitTime = 5000;
       console.log(`[QUALITY GATE][${label}] Waiting ${waitTime / 1000}s before attempt ${attempt + 1}...`);
@@ -355,7 +197,8 @@ async function runWithQualityGate<T>(
         ? ""
         : `\n\n⚠️ Quality validation failed (errors from previous attempt):\n${lastErrors.map((e) => `- ${e}`).join("\n")}\nNote: "category" must be one of {skill, experience, certification, portfolio, keyword}, and "priority" must be one of {high, medium, low} in lowercase.`;
 
-    const text = await callFn(retryFeedback);
+    const { text, usage: callUsage } = await callFn(retryFeedback);
+    usage = addUsage(usage, callUsage);
 
     if (!text) {
       lastErrors = ["No LLM response (API error)"];
@@ -381,16 +224,82 @@ async function runWithQualityGate<T>(
       if (attempt > 0) {
         console.log(`[QUALITY GATE][${label}] Passed quality check on attempt ${attempt + 1}`);
       }
-      return parsed as T;
+      return { data: parsed as T, attempts, usage };
     }
 
     lastErrors = errors;
     console.warn(`[QUALITY GATE][${label}] Attempt ${attempt + 1}/${MAX_QUALITY_RETRIES + 1} failed:`, errors);
   }
 
-  throw new Error(
-    `[QUALITY GATE][${label}] Quality criteria not met after ${MAX_QUALITY_RETRIES + 1} attempts.\nLast errors: ${lastErrors.join(" | ")}`
+  throw new QualityGateError(
+    `[QUALITY GATE][${label}] Quality criteria not met after ${MAX_QUALITY_RETRIES + 1} attempts.\nLast errors: ${lastErrors.join(" | ")}`,
+    attempts,
+    usage
   );
+}
+
+// ── Stage instrumentation ───────────────────────────────────────────────────
+// Times a quality-gated stage, records a structured telemetry metric (on both the success and
+// failure paths), forwards it to the optional onMetric sink (the API route persists to
+// Supabase), and returns the stage value. This is the observability wrapper at the
+// orchestrator boundary — agents themselves stay free of telemetry concerns.
+
+function classifyError(err: any): string {
+  if (err instanceof QualityGateError) return "QUALITY_GATE";
+  const msg = String(err?.message ?? err);
+  if (msg.includes("JSON")) return "JSON_PARSE";
+  if (msg.toLowerCase().includes("timeout") || msg.includes("exceeded")) return "TIMEOUT";
+  return "ERROR";
+}
+
+async function instrumentStage<T>(
+  runId: string,
+  stage: AgentStage,
+  adapter: ModelAdapter,
+  run: () => Promise<QualityGateResult<T>>,
+  onMetric?: (m: AgentRunMetric) => void
+): Promise<T> {
+  const start = Date.now();
+  const emit = (m: AgentRunMetric) => {
+    recordAgentRun(m);
+    onMetric?.(m);
+  };
+
+  try {
+    const { data, attempts, usage } = await run();
+    emit({
+      runId,
+      stage,
+      provider: adapter.provider,
+      model: adapter.model,
+      latencyMs: Date.now() - start,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      cachedTokens: usage.cachedTokens,
+      cacheHit: usage.cachedTokens > 0,
+      retryCount: Math.max(0, attempts - 1),
+      success: true,
+    });
+    return data;
+  } catch (err: any) {
+    const attempts = err instanceof QualityGateError ? err.attempts : MAX_QUALITY_RETRIES + 1;
+    const usage: LlmUsage = err instanceof QualityGateError ? err.usage : { ...ZERO_USAGE };
+    emit({
+      runId,
+      stage,
+      provider: adapter.provider,
+      model: adapter.model,
+      latencyMs: Date.now() - start,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      cachedTokens: usage.cachedTokens,
+      cacheHit: usage.cachedTokens > 0,
+      retryCount: Math.max(0, attempts - 1),
+      success: false,
+      errorType: classifyError(err),
+    });
+    throw err;
+  }
 }
 
 // ── Response normalization ────────────────────────────────────────────────────
@@ -457,6 +366,10 @@ function normalizePlan(
 // - Each stage output is automatically retried if it fails quality criteria.
 // - Career trend reference documents from Vector DB supplement the planning step.
 // - Progress is forwarded via the onProgress callback for SSE streaming.
+// - Per-stage telemetry is recorded for observability and forwarded via onMetric so the API
+//   route can persist it (agents never touch the DB).
+// - The gap-analysis stage runs on the requested provider (default Gemini); planning stays on
+//   Gemini to preserve the context-cache path and the 16k planner output.
 
 export async function runCareerAnalysis(
   resumeJson: ResumeJson,
@@ -470,10 +383,23 @@ export async function runCareerAnalysis(
   targetRole: string,
   targetCompany: string,
   onProgress?: (step: string, detail?: string) => void,
-  locale?: "ko" | "en"
+  locale?: "ko" | "en",
+  provider?: ModelProvider,
+  onMetric?: (m: AgentRunMetric) => void
 ): Promise<CareerPlanOutput & { gap_analysis: any }> {
   const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+  // Planning + context caches always run on Gemini, so the Google key is required even when
+  // gap analysis is delegated to another provider.
   if (!apiKey) throw new Error("GOOGLE_API_KEY or GEMINI_API_KEY is not set.");
+
+  const runId = randomUUID();
+
+  // Resolve adapters. Gap analysis is the provider-swappable stage; planning stays on Gemini.
+  // Building the gap adapter here surfaces a missing provider key (e.g. OPENAI_API_KEY) before
+  // any work starts, so the failure is reported cleanly to the caller.
+  const geminiAdapter = await getModelAdapter("gemini", apiKey);
+  const gapAdapter =
+    provider && provider !== "gemini" ? await getModelAdapter(provider) : geminiAdapter;
 
   // Declared as a leading directive so it appears before the JD text in every prompt.
   // Placing it after the JD risks the model matching the JD's language instead of the user's.
@@ -492,27 +418,35 @@ export async function runCareerAnalysis(
 
   // Warm both caches concurrently. The planner cache used to be created lazily right before
   // step 2, blocking the planner on a cold cache create (~300ms). Doing both upfront overlaps
-  // their cost with each other and keeps step 2 hot.
+  // their cost with each other and keeps step 2 hot. The gap cache is only warmed when the
+  // gap adapter supports context caching (Gemini); otherwise the resume is inlined.
   const [gapCacheName, planCacheName] = await Promise.all([
-    getOrCreateResumeCache(apiKey, gapInstruction, resumeForAnalysis),
-    getOrCreateResumeCache(apiKey, PLANNER_INSTRUCTION, resumeForAnalysis),
+    gapAdapter.supportsContextCache && gapAdapter.getOrCreateCache
+      ? gapAdapter.getOrCreateCache({ systemInstruction: gapInstruction, resumeJson: resumeForAnalysis })
+      : Promise.resolve<string | null>(null),
+    geminiAdapter.getOrCreateCache!({ systemInstruction: PLANNER_INSTRUCTION, resumeJson: resumeForAnalysis }),
   ]);
 
   // ── Step 1: Gap analysis (with quality gate) ─────────────────────────────
   // Uses the user-provided raw JD text directly for precise gap identification.
   onProgress?.("gap_analysis");
-  console.log("[ORCHESTRATOR] Step 1: Gap Analysis started...");
+  console.log(`[ORCHESTRATOR] Step 1: Gap Analysis started (provider=${gapAdapter.provider})...`);
 
-  const gapAnalysisData = await runWithQualityGate<any>(
-    (retryFeedback) => {
-      // When no cache is available, include the full resume JSON inline so the model
-      // always has the data it needs. With a cache, the resume is already in context.
-      const resumeSection = gapCacheName
-        ? "(Resume JSON is included in the context cache above — use it for all phase comparisons.)"
-        : `## Resume JSON (use this for all phase comparisons):
+  const gapAnalysisData = await instrumentStage<any>(
+    runId,
+    "gap_analysis",
+    gapAdapter,
+    () =>
+      runWithQualityGate<any>(
+        (retryFeedback) => {
+          // When no cache is available, include the full resume JSON inline so the model
+          // always has the data it needs. With a cache, the resume is already in context.
+          const resumeSection = gapCacheName
+            ? "(Resume JSON is included in the context cache above — use it for all phase comparisons.)"
+            : `## Resume JSON (use this for all phase comparisons):
 ${JSON.stringify(resumeForAnalysis, null, 2)}`;
 
-      const prompt = `
+          const prompt = `
 ${langDirective}
 
 Follow ALL 8 phases in your instruction exactly. Work through each phase in order.
@@ -542,18 +476,19 @@ ${jdText}
 ${retryFeedback}
 `.trim();
 
-      return callGemini({
-        apiKey,
-        systemInstruction: gapInstruction,
-        userPrompt: prompt,
-        cachedContentName: gapCacheName,
-        maxOutputTokens: 8192,
-        temperature: 0.2,
-        topP: 0.85,
-      });
-    },
-    validateGapAnalysis,
-    "GapAnalysis"
+          return gapAdapter.generateContent({
+            systemInstruction: gapInstruction,
+            userPrompt: prompt,
+            cachedContentName: gapCacheName,
+            maxOutputTokens: 8192,
+            temperature: 0.2,
+            topP: 0.85,
+          });
+        },
+        validateGapAnalysis,
+        "GapAnalysis"
+      ),
+    onMetric
   );
 
   console.log(
@@ -587,9 +522,14 @@ ${retryFeedback}
           .join("\n")
       : "(No side projects in resume)";
 
-  const careerPlanData = await runWithQualityGate<any>(
-    (retryFeedback) => {
-      const prompt = `
+  const careerPlanData = await instrumentStage<any>(
+    runId,
+    "planning",
+    geminiAdapter,
+    () =>
+      runWithQualityGate<any>(
+        (retryFeedback) => {
+          const prompt = `
 ${langDirective}
 
 Based on the target company/role, gap analysis, and career trend context below, output a ${durationWeeks}-week career plan as JSON only.
@@ -639,16 +579,17 @@ Start date: ${startDate} / Duration: ${durationWeeks} weeks
 ${retryFeedback}
 `.trim();
 
-      return callGemini({
-        apiKey,
-        systemInstruction: PLANNER_INSTRUCTION,
-        userPrompt: prompt,
-        cachedContentName: planCacheName,
-        maxOutputTokens: 16384,
-      });
-    },
-    (parsed) => validateCareerPlan(parsed, durationWeeks),
-    "CareerPlan"
+          return geminiAdapter.generateContent({
+            systemInstruction: PLANNER_INSTRUCTION,
+            userPrompt: prompt,
+            cachedContentName: planCacheName,
+            maxOutputTokens: 16384,
+          });
+        },
+        (parsed) => validateCareerPlan(parsed, durationWeeks),
+        "CareerPlan"
+      ),
+    onMetric
   );
 
   console.log(
