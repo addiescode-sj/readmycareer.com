@@ -142,8 +142,7 @@ vite.config.ts.timestamp-*
 
 # Documentation
 chat-documentation/
-prd-documentation/user-stories-KR.md
-CLAUDE.md
+documents/
 
 # Secrets
 readmycareer-c547f96903fa.json

@@ -53,7 +53,7 @@ Detailed I/O specs, constraints, and architecture notes for each agent and MCP s
 - **MCP runtime**: `@modelcontextprotocol/sdk`
 - **Schema validation**: Zod at every agent I/O boundary
 - **Language**: TypeScript ESM, Node ≥ 20
-- **LLM model**: `gemini-3.1-flash-lite-preview` by default (all agents and MCP skills)
+- **LLM model**: `gemini-3.1-flash-lite-preview` by default (all agents and MCP skills). Model ids live in one registry, `agents/lib/models.ts` (`GEMINI_MODEL` / `OPENAI_MODEL`) — never hardcode a model string. In-process code imports from there (app via `@readmycareer/agents/models`); MCP skills run as separate processes and read the same `GEMINI_MODEL` env var, so setting it once switches everything. Token **pricing** (`MODEL_PRICING`) is loaded from `config/model-pricing.json`, the single source the Python eval harness reads too — so live `/admin` cost and offline eval cost stay in sync.
 - **Model calls go through the `ModelAdapter` interface** (`agents/lib/model-adapter.ts`) — never construct a provider SDK client inside an agent or the orchestrator. Gemini is the default; the gap-analysis stage is provider-swappable (`provider` arg / `MODEL_PROVIDER` env) via `agents/lib/adapters/`. To add a provider, implement `ModelAdapter` and register it in the `getModelAdapter` factory.
 - **Observability**: the orchestrator records per-stage telemetry through `agents/lib/observability.ts` and forwards each metric via the `onMetric` callback. Agents stay free of telemetry/DB concerns; the API route persists metrics to `agent_runs`.
 - All agent I/O types must be defined in `agents/types.ts`

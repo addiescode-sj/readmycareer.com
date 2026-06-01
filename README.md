@@ -200,8 +200,13 @@ without touching agent logic or prompts:
 
 | Provider | Default model | Context cache | When to use |
 | --- | --- | --- | --- |
-| **Gemini** (default) | `gemini-3.1-flash-lite-preview` | Yes (1h TTL) | Default — lowest cost, multimodal, free tier |
+| **Gemini** (default) | `gemini-3.1-flash-lite-preview` (`GEMINI_MODEL`) | Yes (1h TTL) | Default — lowest cost, multimodal, free tier |
 | **OpenAI** | `gpt-4o-mini` (`OPENAI_MODEL`) | No | Cross-check quality; stronger reasoning on a borderline gap analysis |
+
+Model identifiers and pricing live in a single registry,
+[agents/lib/models.ts](./agents/lib/models.ts); every agent, app route, and MCP skill resolves
+its model from there, so a model bump (or the `GEMINI_MODEL` env override) takes effect
+everywhere from one place.
 
 Select the provider for the gap-analysis stage per request (`"provider": "openai"` in the
 `/api/analyze` body) or globally via `MODEL_PROVIDER`. Planning stays on Gemini to preserve the
@@ -300,6 +305,9 @@ GOOGLE_DRIVE_FOLDER_ID_JD=
 GOOGLE_DRIVE_FOLDER_ID_REF=
 
 # Optional — model abstraction
+# GEMINI_MODEL=                # override the Gemini model for ALL agents, app routes, and
+#                              # MCP skills at once (single switch point; default
+#                              # gemini-3.1-flash-lite-preview). See agents/lib/models.ts.
 # MODEL_PROVIDER=gemini        # default provider for the gap-analysis stage (gemini | openai)
 # OPENAI_API_KEY=              # required only when running a stage on OpenAI
 # OPENAI_MODEL=gpt-4o-mini     # override the default OpenAI model
