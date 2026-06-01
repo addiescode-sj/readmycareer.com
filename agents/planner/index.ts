@@ -8,6 +8,7 @@ import {
 } from "@google/adk";
 import { z } from "zod";
 import { callMcpTool } from "../lib/mcp-client.js";
+import { GEMINI_MODEL } from "../lib/models.js";
 import { GapAnalyzerAgent } from "../gap-analyzer/index.js";
 import {
   SESSION_KEYS,
@@ -115,7 +116,7 @@ export { INSTRUCTION as PLANNER_INSTRUCTION };
 
 export const PlannerAgent = new LlmAgent({
   name: "PlannerAgent",
-  model: "gemini-3.1-flash-lite-preview",
+  model: GEMINI_MODEL,
   description:
     "GapAnalyzerAgent의 갭 분석 결과를 받아 주차별 커리어 플랜과 타임라인 JSON을 생성합니다.",
   instruction: INSTRUCTION,

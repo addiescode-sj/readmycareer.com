@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { z } from "zod";
+import { GEMINI_MODEL } from "@readmycareer/agents/models";
 import { searchJdFromGoogle } from "@/lib/externalJdSearch";
 
 const ChatSchema = z.object({
@@ -251,7 +252,7 @@ export async function POST(req: NextRequest) {
 
       // Gemini Flash streaming
       const genai = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
-      const model = genai.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+      const model = genai.getGenerativeModel({ model: GEMINI_MODEL });
 
       const systemPrompt = `당신은 readmycareer.com의 커리어 코칭 AI입니다.
 사용자의 개인 커리어 데이터와 JD 데이터베이스를 기반으로 구체적이고 실행 가능한 조언을 제공합니다.

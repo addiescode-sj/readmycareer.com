@@ -5,6 +5,11 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import pdf from "pdf-parse";
 import mammoth from "mammoth";
 
+// Default Gemini model, env-overridable via GEMINI_MODEL. MCP skills run as separate
+// processes and cannot import the agents model registry, so they read the same env var
+// (forwarded by the agent MCP client) — setting GEMINI_MODEL once switches them too.
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite-preview";
+
 // ─── Input / Output Schemas ───────────────────────────────────────────────────
 
 export const ParseInputSchema = z.object({
@@ -118,7 +123,7 @@ async function parseWithGemini(rawText: string): Promise<ResumeJson> {
 
   const genai = new GoogleGenerativeAI(apiKey);
   const model = genai.getGenerativeModel({
-    model: "gemini-3.1-flash-lite-preview",
+    model: GEMINI_MODEL,
     generationConfig: { responseMimeType: "application/json" },
   });
 

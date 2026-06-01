@@ -7,6 +7,7 @@
 // the orchestrator hands each metric to an onMetric callback that the route writes to Supabase.
 
 import type { ModelProvider } from "./model-adapter.js";
+import { MODEL_PRICING } from "./models.js";
 
 export type AgentStage =
   | "gap_analysis"
@@ -30,19 +31,14 @@ export interface AgentRunMetric {
   errorType?: string | null;
 }
 
-// Per-1M-token USD rates. Kept in sync with the estimate in eval/agent_harness.py so the
-// live /admin cost reconciles with the offline eval harness. Update both together.
-const COST_PER_1M: Record<string, { input: number; output: number }> = {
-  gemini: { input: 0.075, output: 0.3 }, // gemini flash-lite list price
-  openai: { input: 0.15, output: 0.6 }, // gpt-4o-mini list price
-};
-
 export function estimateCostUsd(
   provider: string,
   promptTokens: number,
   completionTokens: number
 ): number {
-  const rate = COST_PER_1M[provider] ?? COST_PER_1M.gemini;
+  // Rates come from the shared source config/model-pricing.json (via models.ts); the eval
+  // harness reads the same file, so live /admin cost reconciles with offline eval by design.
+  const rate = MODEL_PRICING[provider as ModelProvider] ?? MODEL_PRICING.gemini;
   return (promptTokens / 1e6) * rate.input + (completionTokens / 1e6) * rate.output;
 }
 

@@ -14,8 +14,10 @@ import type {
   ModelAdapter,
   ModelProvider,
 } from "../model-adapter.js";
+import { GEMINI_MODEL } from "../models.js";
 
-const MODEL_NAME = "gemini-3.1-flash-lite-preview";
+// Resolved from the shared model registry (env-overridable via GEMINI_MODEL).
+const MODEL_NAME = GEMINI_MODEL;
 
 /** Max retry attempts for API 429/5xx errors. */
 const MAX_API_RETRIES = 3;

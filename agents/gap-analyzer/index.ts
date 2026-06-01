@@ -9,6 +9,7 @@ import {
   GapAnalysisInput,
   GapAnalysisOutput,
 } from "../types.js";
+import { GEMINI_MODEL } from "../lib/models.js";
 
 // ─── Agent Instruction ────────────────────────────────────────────────────────
 //
@@ -302,7 +303,7 @@ export { INSTRUCTION as GAP_ANALYZER_INSTRUCTION };
 
 export const GapAnalyzerAgent = new LlmAgent({
   name: "GapAnalyzerAgent",
-  model: "gemini-3.1-flash-lite-preview",
+  model: GEMINI_MODEL,
   description:
     "Compares user resume JSON and raw JD text to analyze competency strengths, gaps, and improvement priorities.",
   instruction: INSTRUCTION,

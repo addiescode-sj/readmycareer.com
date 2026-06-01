@@ -8,6 +8,7 @@ import {
 } from "@google/adk";
 import { z } from "zod";
 import { callMcpTool } from "../lib/mcp-client.js";
+import { GEMINI_MODEL } from "../lib/models.js";
 import { GapAnalyzerAgent } from "../gap-analyzer/index.js";
 import { PlannerAgent } from "../planner/index.js";
 import {
@@ -127,7 +128,7 @@ const INSTRUCTION = `
 
 export const ChatQnAAgent = new LlmAgent({
   name: "ChatQnAAgent",
-  model: "gemini-3.1-flash-lite-preview",
+  model: GEMINI_MODEL,
   description:
     "사용자 채팅 질의에 RAG + 이전 에이전트 컨텍스트를 결합하여 개인화된 답변을 생성합니다.",
   instruction: INSTRUCTION,

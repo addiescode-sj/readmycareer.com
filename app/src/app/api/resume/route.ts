@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import pdf from "pdf-parse";
 import mammoth from "mammoth";
 import { z } from "zod";
+import { GEMINI_MODEL } from "@readmycareer/agents/models";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ async function parseWithGemini(input: GeminiInput): Promise<ResumeJson> {
 
   const genai = new GoogleGenerativeAI(apiKey);
   const model = genai.getGenerativeModel({
-    model: "gemini-3.1-flash-lite-preview",
+    model: GEMINI_MODEL,
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0.1,

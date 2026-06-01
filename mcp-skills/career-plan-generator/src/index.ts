@@ -4,6 +4,11 @@ import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { v4 as uuidv4 } from "uuid";
 
+// Default Gemini model, env-overridable via GEMINI_MODEL. MCP skills run as separate
+// processes and cannot import the agents model registry, so they read the same env var
+// (forwarded by the agent MCP client) — setting GEMINI_MODEL once switches them too.
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite-preview";
+
 // ─── Input / Output Schemas ───────────────────────────────────────────────────
 
 const GapItemSchema = z.object({
@@ -157,7 +162,7 @@ async function generateCareerPlan(input: PlanInput): Promise<PlanOutput> {
 
   const genai = new GoogleGenerativeAI(apiKey);
   const model = genai.getGenerativeModel({
-    model: "gemini-3.1-flash-lite-preview",
+    model: GEMINI_MODEL,
     generationConfig: { responseMimeType: "application/json" },
   });
 

@@ -9,8 +9,10 @@ import {
   OptimizedResumeOutput,
   OptimizedResumeData,
 } from "../types.js";
+import { GEMINI_MODEL } from "../lib/models.js";
 
-const MODEL_NAME = "gemini-3.1-flash-lite-preview";
+// Resolved from the shared model registry (env-overridable via GEMINI_MODEL).
+const MODEL_NAME = GEMINI_MODEL;
 const MAX_RETRIES = 2;
 
 // ── Keyword extractor ─────────────────────────────────────────────────────────

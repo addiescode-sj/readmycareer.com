@@ -12,9 +12,7 @@ import type {
   ModelAdapter,
   ModelProvider,
 } from "../model-adapter.js";
-
-/** Default OpenAI model; override with OPENAI_MODEL. gpt-4o-mini supports JSON-object mode. */
-const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
+import { OPENAI_MODEL } from "../models.js";
 
 /** Max retry attempts for API 429/5xx errors (mirrors the Gemini adapter). */
 const MAX_API_RETRIES = 3;
@@ -34,7 +32,7 @@ export class OpenAIAdapter implements ModelAdapter {
     if (!key) {
       throw new Error("OPENAI_API_KEY is not set — required for provider=openai.");
     }
-    this.model = process.env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL;
+    this.model = OPENAI_MODEL;
     this.client = new OpenAI({ apiKey: key });
   }
 

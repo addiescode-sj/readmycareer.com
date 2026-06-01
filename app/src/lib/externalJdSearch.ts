@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GEMINI_MODEL } from "@readmycareer/agents/models";
 
 export interface ExternalJdResult {
   doc_id: string;
@@ -33,7 +34,7 @@ export async function searchJdFromGoogle(
   const genai = new GoogleGenerativeAI(apiKey);
   const model = genai.getGenerativeModel(
     {
-      model: "gemini-3.1-flash-lite-preview",
+      model: GEMINI_MODEL,
       tools: [{ googleSearch: {} } as any],
     } as any
   );

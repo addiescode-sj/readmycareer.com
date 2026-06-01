@@ -13,6 +13,7 @@
     "./types": "./dist/types.js",
     "./mcp-client": "./dist/lib/mcp-client.js",
     "./model-adapter": "./dist/lib/model-adapter.js",
+    "./models": "./dist/lib/models.js",
     "./observability": "./dist/lib/observability.js"
   },
   "scripts": {
