@@ -5,16 +5,17 @@
   "workspaces": [
     "agents",
     "mcp-skills/*",
-    "app"
+    "app",
+    "eval"
   ],
   "scripts": {
     "dev": "pnpm --filter app dev",
     "build": "pnpm -r build",
-    "eval": "bash eval/run_evals.sh",
-    "eval:agents": "bash eval/run_evals.sh --skip-rag",
-    "eval:fast": "bash eval/run_evals.sh --skip-rag --skip-llm-judge"
+    "eval": "pnpm --filter @readmycareer/eval eval",
+    "eval:agents": "pnpm --filter @readmycareer/eval eval:agents",
+    "eval:fast": "pnpm --filter @readmycareer/eval eval:fast"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.12.0"
   }
 }

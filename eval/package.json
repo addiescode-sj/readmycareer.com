@@ -1,0 +1,27 @@
+{
+  "name": "@readmycareer/eval",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript evaluation harness (agent output quality + RAG retrieval quality)",
+  "type": "module",
+  "scripts": {
+    "eval": "tsx src/run_evals.ts",
+    "eval:agents": "tsx src/run_evals.ts --skip-rag",
+    "eval:fast": "tsx src/run_evals.ts --skip-rag --skip-llm-judge",
+    "agent-harness": "tsx src/agent_harness.ts",
+    "ragas": "tsx src/ragas_eval.ts",
+    "render": "tsx src/render_results.ts",
+    "compare-models": "tsx src/model_comparison.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@pinecone-database/pinecone": "^5.1.0",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
