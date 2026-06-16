@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - 2026-06-16
+
+### Changed
+
+- **Eval harness migrated from Python to TypeScript.** The evaluation suite (agent output quality + RAG retrieval quality) is now a TypeScript workspace package (`@readmycareer/eval`, run with `tsx`) instead of standalone Python scripts. Rewritten: `eval/agent_harness.py` → [eval/src/agent_harness.ts](eval/src/agent_harness.ts), `eval/ragas_eval.py` → [eval/src/ragas_eval.ts](eval/src/ragas_eval.ts) (the four RAGAS metrics are reimplemented natively in [eval/src/lib/ragas-metrics.ts](eval/src/lib/ragas-metrics.ts), since the `ragas` library has no JS port), plus `render_results.py`, `model_comparison.py`, and `run_evals.sh` → their `eval/src/*.ts` equivalents. **Why:** to run strict, compile-time type validation in a more flexible, environment-independent setup — the harness now reuses Zod schemas ([eval/src/lib/schema.ts](eval/src/lib/schema.ts)) to validate every boundary (the `/api/analyze` result, the agent fixtures, and the RAG dataset) and runs inside the pnpm workspace with no Python venv/interpreter dependency. All metrics, thresholds, CSV columns, and the generated Korean report ([documents/agent-eval-report.md](documents/agent-eval-report.md)) are preserved — thresholds were **not** weakened. The `pnpm eval` / `pnpm eval:agents` / `pnpm eval:fast` entry points are unchanged.
+
+### Removed
+
+- Python eval scripts (`agent_harness.py`, `ragas_eval.py`, `render_results.py`, `model_comparison.py`, `run_evals.sh`) and `eval/requirements.txt`, superseded by the TypeScript harness above.
+
+---
+
 ## [0.6.0] - 2026-06-01
 
 ### Added

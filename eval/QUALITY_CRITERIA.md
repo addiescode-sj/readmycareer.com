@@ -3,8 +3,8 @@
 > The contract by which readmycareer.com decides whether an agent / RAG change is
 > good enough to ship. This document explains **what** we measure, **how** each
 > metric is computed, **what threshold** gates a release, and **why** that metric
-> exists. It is the human-readable companion to [`eval/run_evals.sh`](./run_evals.sh),
-> [`eval/agent_harness.py`](./agent_harness.py), and [`eval/ragas_eval.py`](./ragas_eval.py).
+> exists. It is the human-readable companion to [`eval/src/run_evals.ts`](./src/run_evals.ts),
+> [`eval/src/agent_harness.ts`](./src/agent_harness.ts), and [`eval/src/ragas_eval.ts`](./src/ragas_eval.ts).
 
 ---
 
@@ -37,15 +37,15 @@ that question, on top of the baseline correctness/cost/latency checks.
 
 | Layer | Script | Question it answers |
 |---|---|---|
-| **Retrieval quality** | `ragas_eval.py` | Does the RAG layer fetch the *right* reference context and answer faithfully to it? |
-| **Agent output quality** | `agent_harness.py` | Given that context, does the end-to-end `/api/analyze` output show the contextual depth the corpus is meant to enable? |
+| **Retrieval quality** | `ragas_eval.ts` | Does the RAG layer fetch the *right* reference context and answer faithfully to it? |
+| **Agent output quality** | `agent_harness.ts` | Given that context, does the end-to-end `/api/analyze` output show the contextual depth the corpus is meant to enable? |
 
 Both run from the single entry point:
 
 ```bash
-bash eval/run_evals.sh                    # full suite (server + RAG + agent)
-bash eval/run_evals.sh --skip-rag         # agent layer only (no Pinecone)
-bash eval/run_evals.sh --skip-llm-judge   # skip LLM-as-judge metrics (fast)
+pnpm eval                                  # full suite (server + RAG + agent)
+pnpm eval:agents                           # agent layer only (no Pinecone)
+pnpm eval:fast                             # skip RAG + LLM-as-judge metrics (fast)
 ```
 
 A non-zero exit from either layer fails the suite. **Per [CLAUDE.md](../CLAUDE.md)
@@ -54,7 +54,7 @@ dataset/fixtures instead.
 
 ---
 
-## 3. Layer A — RAG retrieval quality (`ragas_eval.py`)
+## 3. Layer A — RAG retrieval quality (`ragas_eval.ts`)
 
 Driven by [`eval/eval_dataset.json`](./eval_dataset.json). Each case is run through
 the live retrieve → generate pipeline against Pinecone, then scored.
@@ -88,7 +88,7 @@ the live retrieve → generate pipeline against Pinecone, then scored.
 
 ---
 
-## 4. Layer B — agent output quality (`agent_harness.py`)
+## 4. Layer B — agent output quality (`agent_harness.ts`)
 
 Driven by [`eval/fixtures/agent_fixtures.json`](./fixtures/agent_fixtures.json) (three
 realistic résumé + JD personas). Each fixture is POSTed to `/api/analyze` and the SSE
@@ -178,7 +178,7 @@ can be rolled out incrementally.
 2. **New agent persona** → add to `eval/fixtures/agent_fixtures.json`, including the
    RAG-grounding fields (`expected_hidden_expectations`, `expected_prerequisite_pairs`)
    where they apply.
-3. **Never** weaken a threshold in `agent_harness.py` / `ragas_eval.py` to make a
+3. **Never** weaken a threshold in `agent_harness.ts` / `ragas_eval.ts` to make a
    regression pass — fix the agent, prompt, chunking, or corpus instead.
 
 ---
@@ -188,7 +188,7 @@ can be rolled out incrementally.
 The original quality gate validates *form* (schema, completeness, dates). These additions
 measure *content* — accuracy against labels, run-to-run stability, and regressions over time.
 
-### 8.1 Gap accuracy vs. labels (`agent_harness.py`)
+### 8.1 Gap accuracy vs. labels (`agent_harness.ts`)
 
 | Metric | What it measures | Threshold |
 |---|---|---|
@@ -211,7 +211,7 @@ quota on normal runs.
 (absolute tolerance `0.05` for rate/score metrics; relative `0.20` for latency/cost). Use it
 in CI or after a prompt/model change to catch quality drops, not just hard threshold breaches.
 
-### 8.4 Grounding / Citation Rate (`ragas_eval.py`)
+### 8.4 Grounding / Citation Rate (`ragas_eval.ts`)
 
 The former *Reference Grounding Rate* is reported as the **Grounding / Citation Rate**: the
 share of reference-targeted cases whose retrieved top-K includes the expected source, plus a
@@ -219,13 +219,13 @@ share of reference-targeted cases whose retrieved top-K includes the expected so
 are the retrieval-level inverse of hallucination and complement RAGAS Faithfulness. Per-case
 cited sources (title, `doc_type`, score) are written to `eval/grounding_results.csv`.
 
-### 8.5 Cross-model comparison — `model_comparison.py`
+### 8.5 Cross-model comparison — `model_comparison.ts`
 
 Runs the fixtures once per provider (`gemini`, `openai`) and compares gap recall, faithfulness,
 schema compliance, p95 latency, and cost. A provider with no API key is reported as
 `SKIPPED (no key)` — **never fabricated**. Output: `eval/model_comparison.csv`.
 
-### 8.6 Published results table — `render_results.py`
+### 8.6 Published results table — `render_results.ts`
 
 Renders the committed eval CSVs into the README "Quality & Evaluation" section between the
 `<!-- EVAL:START -->` / `<!-- EVAL:END -->` markers, so the published numbers stay reproducible
@@ -233,5 +233,5 @@ from artifacts rather than hand-maintained.
 
 > Live operational metrics (per-stage latency, retries, token/cache usage, cost) are separate
 > from this offline suite: they are recorded to the `agent_runs` table at runtime and surfaced
-> at `/admin/observability`. The cost model there mirrors `agent_harness.py` so live and offline
+> at `/admin/observability`. The cost model there mirrors `agent_harness.ts` so live and offline
 > cost reconcile.

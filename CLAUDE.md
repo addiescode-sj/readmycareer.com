@@ -74,9 +74,9 @@ These boundaries exist so the agent layer remains a pure function of its inputs 
 
 ## Eval Discipline
 
-The eval suite ([eval/run_evals.sh](eval/run_evals.sh)) is the contract for shipping changes that touch agents, MCP skills, prompts, or RAG:
+The eval suite ([eval/src/run_evals.ts](eval/src/run_evals.ts)) is the contract for shipping changes that touch agents, MCP skills, prompts, or RAG. It is a TypeScript harness (run with `tsx`) inside the `@readmycareer/eval` workspace package; reuse the shared Zod schemas in [eval/src/lib/schema.ts](eval/src/lib/schema.ts):
 
-- **Run `pnpm eval` before declaring agent/MCP/RAG work complete.** A failing eval blocks the change — do **not** weaken thresholds in `agent_harness.py` / `ragas_eval.py` to make it pass.
+- **Run `pnpm eval` before declaring agent/MCP/RAG work complete.** A failing eval blocks the change — do **not** weaken thresholds in `agent_harness.ts` / `ragas_eval.ts` to make it pass.
 - The agent harness requires `pnpm dev` to be running on `BASE_URL` (default `http://localhost:3000`).
 - Tracked metrics: Schema Compliance, Gap Faithfulness, **Gap Recall/Precision vs. labels**, Plan Completeness, Date Consistency, **Hidden Expectation Coverage**, **Contextual Depth**, p95 Latency, Avg Cost (agents); Faithfulness, Answer Relevancy, Context Precision/Recall, **Grounding/Citation Rate** (RAG). The harness also supports `--repeat N` (variance) and `--save-baseline`/`--compare-baseline` (regression diff).
 - Inspect `eval/agent_harness_results.csv`, `eval/ragas_results.csv`, and `eval/grounding_results.csv` — review the CSV, not just the PASS/FAIL summary. Each agent run also regenerates a human-readable Korean report at [documents/agent-eval-report.md](documents/agent-eval-report.md).
