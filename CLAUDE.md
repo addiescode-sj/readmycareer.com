@@ -111,3 +111,18 @@ Resolves: #<issue>     ← omit entirely if no issue number is associated
 ```
 
 Common types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `build`, `ci`. Typical scopes for this repo: `agents`, `gap-analyzer`, `planner`, `chat`, `resume-optimizer`, `mcp`, `rag`, `api`, `dashboard`, `auth`, `i18n`, `eval`, `ui`.
+
+## Handoff Workflow
+
+Cross-session task state lives in [documents/handoff.md](documents/handoff.md), managed by the `/handoff` skill ([.claude/skills/handoff/SKILL.md](.claude/skills/handoff/SKILL.md)). Sections: `🔜 To Do` / `🚧 In Progress` / `✅ Done`. Item format (do not deviate):
+
+```
+- [ ] **<title>** — <one-line summary>
+  - 파일: `path/a`, `path/b`
+  - 이유: <why it is needed>
+  - 완료 기준(DoD): <what "done" looks like>
+```
+
+- **When the user says "handoff에 추가해줘"** (or "핸드오프에 추가", "add to handoff"), immediately (no confirmation prompt) append the task to the `🔜 To Do` section of [documents/handoff.md](documents/handoff.md) in the exact format above, then update the `마지막 갱신:` line to today's date. If 파일/이유/DoD are unclear, infer them from the current conversation; only ask if genuinely ambiguous. Keep body text Korean, code/paths/commits English.
+
+- **When resuming a session or right before a context compact**, first read [documents/handoff.md](documents/handoff.md) and treat it as the source of truth for "where we left off". Preserve only context that maps to an active `🔜 To Do` / `🚧 In Progress` item — the task's files, rationale, DoD, and any decisions not yet recorded in the repo. Before the compact, fold any such unrecorded decision or progress back into the relevant handoff item (and move finished work to `✅ Done` with date + commit hash) so it survives the summarization. Discard transient detail (tool dumps, abandoned approaches, resolved errors) that no active item depends on.
