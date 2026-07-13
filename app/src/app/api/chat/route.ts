@@ -1,12 +1,22 @@
 import { NextRequest } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { streamText, convertToModelMessages, stepCountIs, tool, type UIMessage } from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { z } from "zod";
 import { GEMINI_MODEL } from "@readmycareer/agents/models";
 import { searchJdFromGoogle } from "@/lib/externalJdSearch";
 
+// role is restricted to user/assistant (excludes "system", which UIMessage otherwise allows) —
+// the client never sends system messages, and accepting one here would let a crafted request
+// inject a second, client-controlled system-priority instruction alongside ours.
+const chatUIMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(["user", "assistant"]),
+  parts: z.array(z.unknown()),
+});
+
 const ChatSchema = z.object({
-  message: z.string().min(1).max(5000),
+  messages: z.array(chatUIMessageSchema).min(1),
   targetRole: z.string().max(200).nullish(),
   targetCompany: z.string().max(200).nullish(),
   sessionContext: z
@@ -19,7 +29,9 @@ const ChatSchema = z.object({
     .optional(),
 });
 
-const MAX_BODY_BYTES = 200_000; // 200 KB (no resume_json)
+// useChat resends the full message history every turn (no server-side session state),
+// so the cap has to fit a whole conversation rather than a single message.
+const MAX_BODY_BYTES = 400_000; // 400 KB
 
 /** Hybrid fallback threshold for Chat RAG */
 const CHAT_RAG_FALLBACK_THRESHOLD = 1; // Fall back to Google Search when Vector DB returns fewer than this many results
@@ -150,6 +162,21 @@ async function searchRag(query: string, topK = 5): Promise<string[]> {
     .filter(Boolean);
 }
 
+function toFriendlyErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : "알 수 없는 오류";
+  const isQuota =
+    raw.includes("429") ||
+    raw.toLowerCase().includes("quota") ||
+    raw.toLowerCase().includes("too many requests");
+  const isServerBusy =
+    raw.includes("503") ||
+    raw.toLowerCase().includes("service unavailable") ||
+    raw.toLowerCase().includes("high demand");
+  if (isQuota) return "현재 AI 서비스 일일 사용량이 초과되었습니다. 내일 다시 시도해주세요.";
+  if (isServerBusy) return "AI 서비스가 일시적으로 혼잡합니다. 잠시 후 다시 시도해주세요.";
+  return "AI 서비스에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해주세요.";
+}
+
 export async function POST(req: NextRequest) {
   // Payload size limit
   const contentLength = Number(req.headers.get("content-length") ?? 0);
@@ -181,7 +208,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { message, targetRole, targetCompany, sessionContext } = parsed;
+  const { messages, targetRole, targetCompany, sessionContext } = parsed;
 
   // Top-level body fields take precedence; fall back to sessionContext if absent
   const effectiveTargetRole =
@@ -192,69 +219,9 @@ export async function POST(req: NextRequest) {
   const effectiveTargetCompany =
     targetCompany || sessionContext?.target_company || "";
 
-  const encoder = new TextEncoder();
-  const stream = new TransformStream<Uint8Array, Uint8Array>();
-  const writer = stream.writable.getWriter();
+  const google = createGoogleGenerativeAI({ apiKey: process.env.GOOGLE_API_KEY! });
 
-  // Execute streaming asynchronously
-  (async () => {
-    try {
-      // RAG hybrid search: Vector DB → Google Search fallback when results are insufficient.
-      // Prepend target company/role context to the query to narrow the search scope.
-      const scopedQuery = [effectiveTargetCompany, effectiveTargetRole, message]
-        .filter(Boolean)
-        .join(" ");
-
-      let ragContexts: string[] = [];
-      let ragQuotaExceeded = false;
-      try {
-        ragContexts = await searchRag(scopedQuery, 5);
-      } catch (ragErr: any) {
-        const msg: string = ragErr?.message ?? "";
-        if (msg.includes("429") || msg.toLowerCase().includes("quota")) {
-          ragQuotaExceeded = true;
-          console.warn("[/api/chat] RAG 임베딩 API 할당량 초과 — 폴백 생략");
-        } else {
-          console.warn("[/api/chat] Vector DB RAG 실패:", msg);
-        }
-        ragContexts = [];
-      }
-
-      if (
-        !ragQuotaExceeded &&
-        ragContexts.length < CHAT_RAG_FALLBACK_THRESHOLD &&
-        effectiveTargetRole &&
-        effectiveTargetCompany
-      ) {
-        console.log("[/api/chat] 벡터DB 결과 부족 — Google Search 폴백");
-        try {
-          const externalResults = await Promise.race([
-            searchJdFromGoogle(effectiveTargetRole, effectiveTargetCompany),
-            new Promise<[]>((resolve) => setTimeout(() => resolve([]), 25_000)),
-          ]);
-          ragContexts = [
-            ...ragContexts,
-            ...externalResults.map((r) => r.text),
-          ];
-        } catch (fallbackErr: any) {
-          const msg: string = fallbackErr?.message ?? "";
-          if (msg.includes("429") || msg.toLowerCase().includes("quota")) {
-            console.warn("[/api/chat] Google Search 폴백 할당량 초과 — 건너뜀");
-            throw new Error(
-              "현재 AI 서비스 일일 사용량이 초과되었습니다. 내일 다시 시도해주세요."
-            );
-          }
-          console.warn("[/api/chat] Google Search 폴백 실패:", msg);
-        }
-      }
-
-      const ragText = ragContexts.join("\n---\n");
-
-      // Gemini Flash streaming
-      const genai = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
-      const model = genai.getGenerativeModel({ model: GEMINI_MODEL });
-
-      const systemPrompt = `당신은 readmycareer.com의 커리어 코칭 AI입니다.
+  const systemPrompt = `당신은 readmycareer.com의 커리어 코칭 AI입니다.
 사용자의 개인 커리어 데이터와 JD 데이터베이스를 기반으로 구체적이고 실행 가능한 조언을 제공합니다.
 
 ## 사용자의 목표 (모든 답변은 이 목표 맥락에서 작성)
@@ -265,95 +232,93 @@ export async function POST(req: NextRequest) {
 ${sessionContext?.gap_analysis ? `갭 분석 결과: ${JSON.stringify(sessionContext.gap_analysis, null, 2).slice(0, 2000)}` : "갭 분석 없음"}
 ${sessionContext?.career_plan ? `커리어 플랜: ${JSON.stringify(sessionContext.career_plan, null, 2).slice(0, 2000)}` : "커리어 플랜 없음"}
 
-## 관련 JD/레퍼런스 자료 (RAG — Vector DB + Google Search 하이브리드)
-${ragText || "관련 자료 없음"}
+## 도구 사용 지침
+특정 채용공고(JD)나 업계 레퍼런스 자료가 필요한 질문에는 search_reference 도구를 호출해 관련 자료를 찾은 후 답변하세요.
+확실히 알고 있는 일반 커리어 조언에는 도구 호출 없이 바로 답변해도 됩니다.
 
 위 컨텍스트를 바탕으로 사용자 질문에 답변하세요. 마크다운 형식으로 답변해도 됩니다.
 ⚠️ 답변 시 target_company/target_role을 절대 임의로 변경하지 마세요.
 ${locale === "en" ? "⚠️ LANGUAGE: Always respond in English regardless of the language of the context or question." : "⚠️ LANGUAGE: 항상 한국어로 답변하세요. JD나 질문이 영어로 작성되어 있어도 반드시 한국어로 답변하세요."}`;
 
-      const GENERATION_TIMEOUT = 30_000;
-      const MAX_STREAM_RETRIES = 2;
-      let result: Awaited<ReturnType<typeof model.generateContentStream>> | null = null;
+  const searchReferenceTool = tool({
+    description:
+      "채용공고(JD) 및 업계 레퍼런스 자료를 검색합니다 (Vector DB + Google Search 하이브리드). 특정 회사/직무의 요구사항이나 트렌드에 대한 질문에 사용하세요.",
+    inputSchema: z.object({
+      query: z.string().describe("검색할 질의 (예: '백엔드 시니어 요구 역량')"),
+    }),
+    execute: async ({ query }) => {
+      // Prepend target company/role context to the query to narrow the search scope.
+      const scopedQuery = [effectiveTargetCompany, effectiveTargetRole, query]
+        .filter(Boolean)
+        .join(" ");
 
-      for (let attempt = 0; attempt <= MAX_STREAM_RETRIES; attempt++) {
+      let contexts: string[] = [];
+      let ragQuotaExceeded = false;
+      try {
+        contexts = await searchRag(scopedQuery, 5);
+      } catch (ragErr: any) {
+        const msg: string = ragErr?.message ?? "";
+        if (msg.includes("429") || msg.toLowerCase().includes("quota")) {
+          ragQuotaExceeded = true;
+          console.warn("[/api/chat] RAG 임베딩 API 할당량 초과 — 폴백 생략");
+        } else {
+          console.warn("[/api/chat] Vector DB RAG 실패:", msg);
+        }
+      }
+
+      if (
+        !ragQuotaExceeded &&
+        contexts.length < CHAT_RAG_FALLBACK_THRESHOLD &&
+        effectiveTargetRole &&
+        effectiveTargetCompany
+      ) {
+        console.log("[/api/chat] 벡터DB 결과 부족 — Google Search 폴백");
         try {
-          result = await Promise.race([
-            model.generateContentStream([
-              { text: systemPrompt },
-              { text: `사용자 질문: ${message}` },
-            ]),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () => reject(new Error("응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.")),
-                GENERATION_TIMEOUT
-              )
-            ),
+          const externalResults = await Promise.race([
+            searchJdFromGoogle(effectiveTargetRole, effectiveTargetCompany),
+            new Promise<[]>((resolve) => setTimeout(() => resolve([]), 25_000)),
           ]);
-          break;
-        } catch (err: any) {
-          const msg: string = err?.message ?? "";
-          const is503 = msg.includes("503") || msg.toLowerCase().includes("service unavailable");
-          if (is503 && attempt < MAX_STREAM_RETRIES) {
-            await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
-            continue;
-          }
-          throw err;
+          contexts = [...contexts, ...externalResults.map((r) => r.text)];
+        } catch (fallbackErr: any) {
+          console.warn("[/api/chat] Google Search 폴백 실패:", fallbackErr?.message ?? fallbackErr);
         }
       }
 
-      const CHUNK_TIMEOUT = 15_000;
-      const streamIter = result!.stream[Symbol.asyncIterator]();
-      while (true) {
-        let chunkTimer: ReturnType<typeof setTimeout>;
-        const next = await Promise.race([
-          streamIter.next().then((r) => { clearTimeout(chunkTimer!); return r; }),
-          new Promise<never>((_, reject) => {
-            chunkTimer = setTimeout(
-              () => reject(new Error("스트림 응답이 지연되고 있습니다. 다시 시도해주세요.")),
-              CHUNK_TIMEOUT
-            );
-          }),
-        ]);
-        if (next.done) break;
-        const text = next.value.text();
-        if (text) {
-          await writer.write(
-            encoder.encode(`data: ${JSON.stringify({ text })}\n\n`)
-          );
-        }
-      }
-
-      await writer.write(encoder.encode("data: [DONE]\n\n"));
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : "알 수 없는 오류";
-      const isQuota =
-        raw.includes("429") ||
-        raw.toLowerCase().includes("quota") ||
-        raw.toLowerCase().includes("too many requests");
-      const isServerBusy =
-        raw.includes("503") ||
-        raw.toLowerCase().includes("service unavailable") ||
-        raw.toLowerCase().includes("high demand");
-      const errMsg = isQuota
-        ? "현재 AI 서비스 일일 사용량이 초과되었습니다. 내일 다시 시도해주세요."
-        : isServerBusy
-        ? "AI 서비스가 일시적으로 혼잡합니다. 잠시 후 다시 시도해주세요."
-        : "AI 서비스에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해주세요.";
-      await writer.write(
-        encoder.encode(`data: ${JSON.stringify({ error: errMsg })}\n\n`)
-      );
-      await writer.write(encoder.encode("data: [DONE]\n\n"));
-    } finally {
-      await writer.close();
-    }
-  })();
-
-  return new Response(stream.readable, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
+      return {
+        results: contexts.map((text) => ({
+          title: effectiveTargetCompany || effectiveTargetRole || "Reference",
+          snippet: text.slice(0, 400),
+        })),
+      };
     },
   });
+
+  try {
+    const modelMessages = await convertToModelMessages(messages as UIMessage[]);
+
+    const result = streamText({
+      model: google(GEMINI_MODEL),
+      system: systemPrompt,
+      messages: modelMessages,
+      tools: { search_reference: searchReferenceTool },
+      // Allow one tool round-trip (search) plus the final answer step.
+      stopWhen: stepCountIs(4),
+      timeout: { totalMs: 45_000, chunkMs: 15_000 },
+      providerOptions: {
+        google: {
+          thinkingConfig: { includeThoughts: true, thinkingBudget: 1024 },
+        },
+      },
+    });
+
+    return result.toUIMessageStreamResponse({
+      originalMessages: messages as UIMessage[],
+      onError: toFriendlyErrorMessage,
+    });
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: toFriendlyErrorMessage(err) }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
 }

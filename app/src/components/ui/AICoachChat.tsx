@@ -4,9 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Bot, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslations } from "next-intl";
-import ReactMarkdown from "react-markdown";
-import { createClient } from "@/lib/supabase/client";
-import { useChatMessages, useAppendChatMessages, type ChatMessage } from "@/hooks/useChatMessages";
+import { useCareerCoachChat, messageText } from "@/hooks/useCareerCoachChat";
+import { ChatMessageParts } from "@/components/chat/ChatMessageParts";
 
 interface Props {
   planId?: string;
@@ -27,7 +26,6 @@ export function AICoachChat({
 }: Props) {
   const t = useTranslations("ChatInterface");
   const tFloat = useTranslations("FloatingChat");
-  const supabase = createClient();
 
   const [internalOpen, setInternalOpen] = useState(false);
   const isOpen = isOpenProp !== undefined ? isOpenProp : internalOpen;
@@ -36,32 +34,24 @@ export function AICoachChat({
     onOpenChange?.(open);
   };
 
-  // ── Server state: persisted history, fetched as soon as planId is known ────
-  const { data: serverMessages = [], isLoading: isLoadingHistory } = useChatMessages(planId);
-  const appendMessages = useAppendChatMessages(planId);
-
-  // ── Client state: in-flight exchange ────────────────────────────────────────
-  const [pendingUser, setPendingUser] = useState<string | null>(null);
-  const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Combine server history + in-flight messages for display
-  const greeting: ChatMessage = { role: "assistant", content: t("greeting") };
-  const baseMessages: ChatMessage[] =
-    !isLoadingHistory && serverMessages.length === 0 ? [greeting] : serverMessages;
+  const { messages, sendMessage, isStreaming, isLoadingHistory, error } = useCareerCoachChat({
+    planId,
+    targetRole,
+    targetCompany,
+    gapAnalysis,
+  });
 
-  const displayMessages: ChatMessage[] = [
-    ...baseMessages,
-    ...(pendingUser !== null ? [{ role: "user" as const, content: pendingUser }] : []),
-    ...(streamingContent !== null ? [{ role: "assistant" as const, content: streamingContent }] : []),
-  ];
+  const displayMessages = messages.length === 0 && !isLoadingHistory
+    ? [{ id: "greeting", role: "assistant" as const, parts: [{ type: "text" as const, text: t("greeting") }] }]
+    : messages;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [displayMessages.length, streamingContent]);
+  }, [displayMessages.length, isStreaming]);
 
   useEffect(() => {
     const handleSidebarState = (e: Event) => {
@@ -78,99 +68,11 @@ export function AICoachChat({
     window.dispatchEvent(new CustomEvent("mobile-chat-state", { detail: { open: isOpen } }));
   }, [isOpen]);
 
-  async function sendMessage(text: string) {
-    if (!text.trim() || isLoading) return;
-
-    setPendingUser(text);
-    setStreamingContent("");
+  function handleSend() {
+    if (!input.trim() || isStreaming) return;
+    sendMessage(input);
     setInput("");
-    setIsLoading(true);
-
-    let currentUserId: string | undefined;
-    if (planId) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        currentUserId = user.id;
-        await supabase.from("chat_messages").insert({
-          career_plan_id: planId,
-          user_id: currentUserId,
-          role: "user",
-          content: text,
-        });
-      }
-    }
-
-    setStreamingContent("");
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90_000);
-    let assistantText = "";
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          message: text,
-          targetRole,
-          targetCompany,
-          sessionContext: {
-            gap_analysis: gapAnalysis ?? null,
-            target_role: targetRole,
-            target_company: targetCompany,
-          },
-        }),
-      });
-
-      if (!res.ok || !res.body) throw new Error(t("genericError"));
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const payload = line.slice(6).trim();
-          if (payload === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(payload) as { text?: string; error?: string };
-            if (parsed.text) {
-              assistantText += parsed.text;
-              setStreamingContent(assistantText);
-            } else if (parsed.error) {
-              assistantText = parsed.error;
-              setStreamingContent(assistantText);
-            }
-          } catch { /* skip malformed SSE */ }
-        }
-      }
-
-      if (planId && currentUserId && assistantText) {
-        await supabase.from("chat_messages").insert({
-          career_plan_id: planId,
-          user_id: currentUserId,
-          role: "assistant",
-          content: assistantText,
-        });
-      }
-
-      // Commit the completed exchange into the RQ cache
-      appendMessages(text, assistantText);
-    } catch {
-      setStreamingContent(t("genericError"));
-    } finally {
-      clearTimeout(timeoutId);
-      setIsLoading(false);
-      setPendingUser(null);
-      setStreamingContent(null);
-      textareaRef.current?.focus();
-    }
+    textareaRef.current?.focus();
   }
 
   return (
@@ -206,43 +108,45 @@ export function AICoachChat({
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-              {isLoadingHistory && serverMessages.length === 0 ? (
+              {isLoadingHistory ? (
                 <div className="flex justify-center pt-8">
                   <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                 </div>
               ) : (
-                displayMessages.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div
-                      className={`max-w-[82%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed ${
-                        msg.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-br-sm"
-                          : "bg-muted text-foreground rounded-bl-sm"
-                      }`}
-                    >
-                      {msg.role === "assistant" ? (
-                        msg.content ? (
-                          <div className="prose prose-sm max-w-none [&_p]:mb-1 [&_ul]:mb-1">
-                            <ReactMarkdown
-                              skipHtml={true}
-                              allowedElements={["p", "strong", "em", "ul", "ol", "li", "code"]}
-                            >
-                              {msg.content}
-                            </ReactMarkdown>
-                          </div>
+                <>
+                  {displayMessages.map((msg) => (
+                    <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`max-w-[82%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed ${
+                          msg.role === "user"
+                            ? "bg-primary text-primary-foreground rounded-br-sm"
+                            : "bg-muted text-foreground rounded-bl-sm"
+                        }`}
+                      >
+                        {msg.role === "assistant" ? (
+                          <ChatMessageParts message={msg} />
+                        ) : (
+                          <p className="whitespace-pre-wrap">{messageText(msg)}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {(isStreaming && displayMessages[displayMessages.length - 1]?.role !== "assistant") || error ? (
+                    <div className="flex justify-start">
+                      <div className="max-w-[82%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed bg-muted text-foreground rounded-bl-sm">
+                        {error ? (
+                          <p>{error.message}</p>
                         ) : (
                           <span className="inline-flex gap-1">
                             <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.3s]" />
                             <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.15s]" />
                             <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce" />
                           </span>
-                        )
-                      ) : (
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ) : null}
+                </>
               )}
               <div ref={bottomRef} />
             </div>
@@ -257,17 +161,17 @@ export function AICoachChat({
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      sendMessage(input);
+                      handleSend();
                     }
                   }}
                   placeholder={t("placeholder")}
                   rows={3}
                   className="flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                  disabled={isLoading}
+                  disabled={isStreaming}
                 />
                 <button
-                  onClick={() => sendMessage(input)}
-                  disabled={isLoading || !input.trim()}
+                  onClick={handleSend}
+                  disabled={isStreaming || !input.trim()}
                   className="shrink-0 w-9 h-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:opacity-90 disabled:opacity-40 transition-opacity"
                 >
                   <Send className="w-4 h-4" />
