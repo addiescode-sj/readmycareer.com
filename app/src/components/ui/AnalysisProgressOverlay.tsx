@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -8,15 +8,17 @@ interface Props {
   isVisible: boolean;
   stage: string;
   progress: number; // 0-100
+  reasoning?: string; // streamed LLM output tokens
 }
 
 const RING_RADIUS = 54;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-export function AnalysisProgressOverlay({ isVisible, stage, progress }: Props) {
+export function AnalysisProgressOverlay({ isVisible, stage, progress, reasoning }: Props) {
   const t = useTranslations("AnalysisProgressOverlay");
   const [cardIndex, setCardIndex] = useState(0);
   const [displayPct, setDisplayPct] = useState(0);
+  const reasoningRef = useRef<HTMLPreElement>(null);
 
   const insights: string[] = [
     t("insights.0"),
@@ -48,6 +50,13 @@ export function AnalysisProgressOverlay({ isVisible, stage, progress }: Props) {
     }, 30);
     return () => clearTimeout(id);
   }, [isVisible, progress, displayPct]);
+
+  // Auto-scroll reasoning panel to bottom as tokens arrive
+  useEffect(() => {
+    if (reasoningRef.current) {
+      reasoningRef.current.scrollTop = reasoningRef.current.scrollHeight;
+    }
+  }, [reasoning]);
 
   return (
     <AnimatePresence>
@@ -150,6 +159,37 @@ export function AnalysisProgressOverlay({ isVisible, stage, progress }: Props) {
                 </motion.div>
               </AnimatePresence>
             </div>
+
+            {/* ── Reasoning stream (shown once LLM starts responding) ── */}
+            <AnimatePresence>
+              {reasoning && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="w-full"
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(134,239,172,0.8)" }}>
+                      {t("reasoningLabel")}
+                    </span>
+                  </div>
+                  <pre
+                    ref={reasoningRef}
+                    className="w-full text-[11px] leading-relaxed overflow-y-auto max-h-28 rounded-xl p-3 font-mono whitespace-pre-wrap break-all"
+                    style={{
+                      background: "rgba(0,255,128,0.04)",
+                      border: "1px solid rgba(134,239,172,0.15)",
+                      color: "rgba(134,239,172,0.75)",
+                    }}
+                  >
+                    {reasoning}
+                  </pre>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* ── Progress dots ── */}
             <div className="flex gap-2">

@@ -1,8 +1,12 @@
 import { NextRequest } from "next/server";
+import { createHash } from "crypto";
 import { callMcpTool } from "@readmycareer/agents/mcp-client";
 import type { AgentRunMetric } from "@readmycareer/agents/observability";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { z } from "zod";
+
+// Extend Vercel serverless function timeout to 60 seconds (Pro tier max without Enterprise).
+export const maxDuration = 60;
 
 const AnalyzeSchema = z.object({
   resumeJson: z.record(z.unknown()),
@@ -14,7 +18,100 @@ const AnalyzeSchema = z.object({
   locale: z.enum(["ko", "en"]).optional(),
   // Optional LLM provider override for the gap-analysis stage (default: gemini).
   provider: z.enum(["gemini", "openai"]).optional(),
+  // Set when retrying a run that already returned a `job` event — lets the pipeline skip
+  // stages already checkpointed in career_plan_jobs. See runCareerAnalysis's `checkpoint` param.
+  resumeJobId: z.string().uuid().optional(),
 });
+
+type CareerPlanJobRow = {
+  id: string;
+  status: "pending" | "gap_analysis_done" | "completed" | "error";
+  gap_analysis_result: unknown;
+  career_plan_result: unknown;
+  input_fingerprint: string | null;
+};
+
+/**
+ * Fingerprints the request inputs a checkpointed job is bound to, so a resumed/replayed job
+ * can never be served against a different resume/JD/role/duration/date/provider than the one
+ * it was actually computed for (e.g. a retry that edited the JD after receiving a jobId).
+ */
+function computeInputFingerprint(input: {
+  resumeJson: unknown;
+  jdText: string;
+  targetRole: string;
+  targetCompany: string;
+  durationWeeks: number;
+  startDate: string;
+  locale: "ko" | "en";
+  provider?: "gemini" | "openai";
+}): string {
+  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+
+/**
+ * Durable-job checkpointing for the analyze pipeline (client-reconnect resumability only —
+ * see supabase/migrations/20260713000000_add_career_plan_jobs.sql). Anonymous requests
+ * (userId === null) are not checkpointed; every helper here is a no-op for them.
+ */
+async function createCareerPlanJob(userId: string | null, inputFingerprint: string): Promise<string | null> {
+  if (!userId) return null;
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from("career_plan_jobs")
+      .insert({ user_id: userId, input_fingerprint: inputFingerprint })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return data.id as string;
+  } catch (err: any) {
+    console.warn("[/api/analyze] career_plan_jobs insert failed:", err?.message ?? err);
+    return null;
+  }
+}
+
+async function fetchCareerPlanJob(jobId: string, userId: string | null): Promise<CareerPlanJobRow | null> {
+  if (!userId) return null;
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from("career_plan_jobs")
+      .select("id, status, gap_analysis_result, career_plan_result, input_fingerprint")
+      .eq("id", jobId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw error;
+    return data as CareerPlanJobRow | null;
+  } catch (err: any) {
+    console.warn("[/api/analyze] career_plan_jobs fetch failed:", err?.message ?? err);
+    return null;
+  }
+}
+
+async function updateCareerPlanJob(
+  jobId: string | null,
+  patch: { status: CareerPlanJobRow["status"]; gap_analysis_result?: unknown; career_plan_result?: unknown; error_message?: string },
+  label: string
+): Promise<void> {
+  if (!jobId) return;
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase.from("career_plan_jobs").update(patch).eq("id", jobId);
+    if (error) throw error;
+  } catch (err: any) {
+    console.warn(`[/api/analyze] career_plan_jobs ${label} checkpoint failed:`, err?.message ?? err);
+  }
+}
+
+const checkpointGapAnalysis = (jobId: string | null, gapAnalysisData: unknown) =>
+  updateCareerPlanJob(jobId, { status: "gap_analysis_done", gap_analysis_result: gapAnalysisData }, "gap-analysis");
+
+const completeCareerPlanJob = (jobId: string | null, careerPlan: unknown) =>
+  updateCareerPlanJob(jobId, { status: "completed", career_plan_result: careerPlan }, "completion");
+
+const failCareerPlanJob = (jobId: string | null, errorMessage: string) =>
+  updateCareerPlanJob(jobId, { status: "error", error_message: errorMessage }, "error");
 
 /**
  * Persists per-stage agent telemetry to Supabase. Best-effort and non-blocking: a failure here
@@ -127,7 +224,7 @@ export async function POST(req: NextRequest) {
   // Accept-Language is only used as a fallback for clients that don't send the locale field.
   const locale = body.locale ?? detectLocale(req.headers.get("accept-language"));
 
-  const { resumeJson, targetRole, targetCompany, jdText, durationWeeks, startDate, provider } = body;
+  const { resumeJson, targetRole, targetCompany, jdText, durationWeeks, startDate, provider, resumeJobId } = body;
 
   // Resolve the user (if any) up front, in request scope, for telemetry attribution.
   // The analyze endpoint also serves anonymous visitors, so userId may be null.
@@ -140,10 +237,37 @@ export async function POST(req: NextRequest) {
     // Anonymous / no session — telemetry rows are stored with a null user_id.
   }
 
+  const inputFingerprint = computeInputFingerprint({
+    resumeJson, jdText, targetRole, targetCompany, durationWeeks, startDate, locale, provider,
+  });
+
+  // Durable-job lookup: only meaningful for authenticated retries carrying a jobId from a
+  // prior `job` event. Anonymous requests and fresh runs fall through with existingJob = null.
+  const fetchedJob = resumeJobId ? await fetchCareerPlanJob(resumeJobId, userId) : null;
+  // A checkpointed job is only resumable/replayable for the exact inputs it was computed for —
+  // otherwise a retry after editing the JD/resume/role could replay or splice in stale data.
+  if (fetchedJob && fetchedJob.input_fingerprint !== inputFingerprint) {
+    console.warn(`[/api/analyze] job ${fetchedJob.id} input fingerprint mismatch — ignoring checkpoint`);
+  }
+  const existingJob = fetchedJob && fetchedJob.input_fingerprint === inputFingerprint ? fetchedJob : null;
+
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: string, data: unknown) =>
         controller.enqueue(sseChunk(event, data));
+
+      // Full replay: this exact job already finished — skip the pipeline entirely.
+      if (existingJob?.status === "completed" && existingJob.career_plan_result) {
+        send("job", { jobId: existingJob.id });
+        send("result", existingJob.career_plan_result);
+        send("done", {});
+        controller.close();
+        return;
+      }
+
+      const jobId = existingJob?.id ?? (await createCareerPlanJob(userId, inputFingerprint));
+      if (jobId) send("job", { jobId });
+      const precomputedGapAnalysis = existingJob?.gap_analysis_result ?? undefined;
 
       // Per-stage telemetry collected from the orchestrator and persisted after the run.
       const metrics: AgentRunMetric[] = [];
@@ -186,7 +310,12 @@ export async function POST(req: NextRequest) {
             onProgress?: (step: string, detail?: string) => void,
             locale?: "ko" | "en",
             provider?: "gemini" | "openai",
-            onMetric?: (m: AgentRunMetric) => void
+            onMetric?: (m: AgentRunMetric) => void,
+            checkpoint?: {
+              precomputedGapAnalysis?: unknown;
+              onGapAnalysisComplete?: (gapAnalysisData: unknown) => void;
+              onToken?: (chunk: string) => void;
+            }
           ) => Promise<unknown>;
         };
 
@@ -203,13 +332,23 @@ export async function POST(req: NextRequest) {
           locale,
           provider,
           // onMetric → collect per-stage telemetry for post-run persistence
-          (m) => metrics.push(m)
+          (m) => metrics.push(m),
+          {
+            precomputedGapAnalysis,
+            // Fire-and-forget: checkpointGapAnalysis swallows its own errors, so this never
+            // throws into the orchestrator's control flow.
+            onGapAnalysisComplete: (data) => void checkpointGapAnalysis(jobId, data),
+            // Stream partial LLM tokens to the client for live reasoning display.
+            onToken: (chunk) => send("token", { text: chunk }),
+          }
         );
 
         // 3. Send result
+        await completeCareerPlanJob(jobId, careerPlan);
         send("result", careerPlan);
       } catch (err: unknown) {
         console.error("[/api/analyze]", err);
+        await failCareerPlanJob(jobId, err instanceof Error ? err.message : "Unknown error");
         send("error", { message: "An error occurred during analysis." });
       } finally {
         // Persist telemetry (best-effort) before closing the stream.

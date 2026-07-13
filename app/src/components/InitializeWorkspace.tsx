@@ -42,7 +42,20 @@ export default function InitializeWorkspace() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeStage, setAnalyzeStage] = useState<string>("");
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
+  const [analyzeReasoning, setAnalyzeReasoning] = useState<string>("");
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+
+  // Durable-job checkpoint: set from the `job` SSE event, reused on a retry so the pipeline
+  // can skip a gap-analysis stage already checkpointed server-side (see /api/analyze).
+  // Keyed against the inputs it was computed for — reused only if those are unchanged,
+  // otherwise a retry after editing the JD/role would silently replay a stale checkpoint.
+  const analyzeJobRef = useRef<{
+    jobId: string;
+    targetRole: string;
+    targetCompany: string;
+    jdText: string;
+    durationWeeks: number | "";
+  } | null>(null);
 
   const STEP_PROGRESS: Record<string, number> = {
     reference_search: 15,
@@ -171,7 +184,18 @@ export default function InitializeWorkspace() {
     setAnalyzeError(null);
     setIsAnalyzing(true);
     setAnalyzeProgress(5);
+    setAnalyzeReasoning("");
     setAnalyzeStage(t("preparingAnalysis"));
+
+    // Only resume a checkpointed job if this retry uses the exact same inputs it was
+    // computed for — otherwise start fresh so the checkpoint can't go stale.
+    const resumableJob = analyzeJobRef.current;
+    const canResume =
+      resumableJob &&
+      resumableJob.targetRole === targetRole &&
+      resumableJob.targetCompany === targetCompany &&
+      resumableJob.jdText === jdText &&
+      resumableJob.durationWeeks === durationWeeks;
 
     try {
       const res = await fetch("/api/analyze", {
@@ -185,6 +209,7 @@ export default function InitializeWorkspace() {
           durationWeeks: durationWeeks as number,
           startDate,
           locale,
+          resumeJobId: canResume ? resumableJob.jobId : undefined,
         }),
       });
 
@@ -196,6 +221,7 @@ export default function InitializeWorkspace() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let resultReceived = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -214,16 +240,27 @@ export default function InitializeWorkspace() {
           const event = eventLine.replace("event:", "").trim();
           const data = JSON.parse(dataLine.replace("data:", "").trim()) as Record<string, unknown>;
 
-          if (event === "progress") {
+          if (event === "job") {
+            const jobId = data["jobId"] as string | undefined;
+            analyzeJobRef.current = jobId
+              ? { jobId, targetRole, targetCompany, jdText, durationWeeks }
+              : null;
+          } else if (event === "token") {
+            setAnalyzeReasoning((prev) => prev + (data["text"] as string ?? ""));
+          } else if (event === "progress") {
             const step = (data["step"] as string) ?? "";
             const progressKeys = ["reference_search", "reference_search_done", "cache", "gap_analysis", "planning", "done"] as const;
             type ProgressKey = typeof progressKeys[number];
             const isKnownStep = (progressKeys as readonly string[]).includes(step);
             setAnalyzeStage(isKnownStep ? t(`progress.${step as ProgressKey}`) : "");
             const pct = STEP_PROGRESS[step];
-            if (pct !== undefined) setAnalyzeProgress(pct);
+            // ponytail: only advance, never retreat — reference_search_done (30%) can arrive after gap_analysis (62%)
+            if (pct !== undefined) setAnalyzeProgress((prev) => Math.max(prev, pct));
           } else if (event === "result") {
+            resultReceived = true;
             setAnalyzeStage(t("analysisComplete"));
+            // The run finished — the checkpoint (if any) is no longer needed for a retry.
+            analyzeJobRef.current = null;
             setAnalysisResult(
               data as Record<string, unknown>,
               (data["gap_analysis"] as Record<string, unknown>) ?? {},
@@ -235,6 +272,11 @@ export default function InitializeWorkspace() {
             throw new Error((data["message"] as string) ?? t("analysisError"));
           }
         }
+      }
+
+      // Stream closed without a result: server timed out or was killed mid-run.
+      if (!resultReceived) {
+        throw new Error(t("analysisError"));
       }
     } catch (err) {
       setAnalyzeError(err instanceof Error ? err.message : t("genericError"));
@@ -248,7 +290,7 @@ export default function InitializeWorkspace() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <AnalysisProgressOverlay isVisible={isAnalyzing} stage={analyzeStage} progress={analyzeProgress} />
+      <AnalysisProgressOverlay isVisible={isAnalyzing} stage={analyzeStage} progress={analyzeProgress} reasoning={analyzeReasoning} />
       {/* Focused Header */}
       <header className="p-6 border-b border-border bg-white/50 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
