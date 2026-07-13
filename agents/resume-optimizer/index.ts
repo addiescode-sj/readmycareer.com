@@ -3,17 +3,71 @@
 // Calls Gemini directly (no MCP subprocess) so it works in any Node.js runtime,
 // including Vercel serverless functions.
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateObject, NoObjectGeneratedError } from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { z } from "zod";
 import {
   OptimizedResumeInput,
   OptimizedResumeOutput,
   OptimizedResumeData,
 } from "../types.js";
-import { GEMINI_MODEL } from "../lib/models.js";
+import { GEMINI_MODEL_REASONING } from "../lib/models.js";
 
-// Resolved from the shared model registry (env-overridable via GEMINI_MODEL).
-const MODEL_NAME = GEMINI_MODEL;
+// Reasoning-heavy synthesis stage (env-overridable via GEMINI_MODEL_REASONING).
+const MODEL_NAME = GEMINI_MODEL_REASONING;
 const MAX_RETRIES = 2;
+
+// Mirrors the fields actually asked of the model in buildUserPrompt's "Output JSON Schema"
+// section — deliberately narrower than the OptimizedResumeData/Output TS interfaces, since
+// experience[].location/description are always filled from input (never asked of the LLM)
+// and markdown/meta.generated_at are always overwritten below (renderMarkdown / Date.now()).
+const optimizedResumeSchema = z.object({
+  resume_data: z.object({
+    personal: z.object({
+      name: z.string().nullable(),
+      job_title: z.string(),
+      links: z.array(z.string()),
+      email: z.string().nullable(),
+      phone: z.string().nullable(),
+    }),
+    highlights: z.array(z.string()),
+    skills: z.array(z.string()),
+    experience: z.array(
+      z.object({
+        company: z.string(),
+        title: z.string(),
+        period: z.object({ start: z.string(), end: z.string().nullable() }),
+        achievements: z.array(z.string()),
+      })
+    ),
+    projects: z.array(
+      z.object({
+        name: z.string(),
+        achievements: z.array(z.string()),
+      })
+    ),
+    education: z.array(
+      z.object({
+        institution: z.string(),
+        degree: z.string().nullable(),
+        major: z.string().nullable(),
+        period: z.object({ start: z.string(), end: z.string().nullable() }),
+        gpa: z.string().nullable(),
+      })
+    ),
+    awards_and_certs: z.array(
+      z.object({
+        name: z.string(),
+        issuer: z.string().nullable(),
+        date: z.string().nullable(),
+      })
+    ),
+    cover_letter: z.string(),
+  }),
+  meta: z.object({
+    keywords_applied: z.array(z.string()),
+  }),
+});
 
 // ── Keyword extractor ─────────────────────────────────────────────────────────
 
@@ -157,10 +211,7 @@ ${gap_analysis.summary || "N/A"}
     "awards_and_certs": [{ "name": string, "issuer": string|null, "date": string|null }],
     "cover_letter": string
   },
-  "markdown": string,
   "meta": {
-    "generated_at": string,
-    "language": "${language}",
     "keywords_applied": string[]
   }
 }
@@ -172,8 +223,6 @@ IMPORTANT:
 - projects[].achievements: rewrite each bullet in the output language (${language}); keep projects[].name identical to the input project name
 - education[].period.start/end: copy byte-for-byte from "Education" input above
 - awards_and_certs[].date: copy byte-for-byte from "Certifications & Awards" input above (null if listed as N/A)
-- markdown must render in this exact order: personal info, highlights, skills, experience, projects, education, awards_and_certs, cover_letter
-- Output JSON only, no markdown fences
 `.trim();
 }
 
@@ -262,43 +311,41 @@ async function generateResumeDirect(input: OptimizedResumeInput): Promise<Optimi
   const systemInstruction = buildSystemInstruction(language);
   const userPrompt = buildUserPrompt(input, requiredKeywords, preferredKeywords);
 
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({ model: MODEL_NAME, systemInstruction });
+  const google = createGoogleGenerativeAI({ apiKey });
+  const model = google(MODEL_NAME);
 
   let lastError = "";
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          maxOutputTokens: 8192,
-          temperature: 0.3,
-          topP: 0.9,
-        },
+      const { object } = await generateObject({
+        model,
+        schema: optimizedResumeSchema,
+        system: systemInstruction,
+        prompt: userPrompt,
+        maxOutputTokens: 8192,
+        temperature: 0.3,
+        topP: 0.9,
       });
 
-      const text = result.response.text();
-      const cleaned = text.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim();
-      const parsed = JSON.parse(cleaned) as OptimizedResumeOutput;
-
-      if (!parsed.resume_data?.highlights || parsed.resume_data.highlights.length < 3) {
-        lastError = `highlights count insufficient: ${parsed.resume_data?.highlights?.length ?? 0}`;
+      if (object.resume_data.highlights.length < 3) {
+        lastError = `highlights count insufficient: ${object.resume_data.highlights.length}`;
         continue;
       }
-      if (!parsed.resume_data?.cover_letter || parsed.resume_data.cover_letter.trim().length < 50) {
+      if (object.resume_data.cover_letter.trim().length < 50) {
         lastError = "cover_letter too short or missing";
         continue;
       }
-      if (!Array.isArray(parsed.resume_data?.experience)) {
-        lastError = "experience section missing from output";
-        continue;
-      }
+
+      const parsed: OptimizedResumeOutput = {
+        resume_data: object.resume_data as OptimizedResumeData,
+        markdown: "",
+        meta: { generated_at: "", language, keywords_applied: object.meta.keywords_applied },
+      };
 
       // Date hardening: overwrite LLM-generated dates with exact input values
       parsed.resume_data.experience = input.resume_json.experience.map((src, i) => {
-        const llm = parsed.resume_data.experience?.[i];
+        const llm = object.resume_data.experience[i];
         return {
           company: llm?.company ?? src.company,
           title: llm?.title ?? src.title,
@@ -309,7 +356,7 @@ async function generateResumeDirect(input: OptimizedResumeInput): Promise<Optimi
         };
       });
       parsed.resume_data.education = input.resume_json.education.map((src, i) => {
-        const llm = parsed.resume_data.education?.[i];
+        const llm = object.resume_data.education[i];
         return {
           institution: llm?.institution ?? src.institution,
           degree: llm?.degree ?? src.degree,
@@ -318,14 +365,14 @@ async function generateResumeDirect(input: OptimizedResumeInput): Promise<Optimi
           gpa: llm?.gpa ?? src.gpa,
         };
       });
-      parsed.resume_data.awards_and_certs = (parsed.resume_data.awards_and_certs ?? []).map((llm, i) => {
+      parsed.resume_data.awards_and_certs = object.resume_data.awards_and_certs.map((llm, i) => {
         const src = input.resume_json.certifications[i];
         return { name: llm.name, issuer: llm.issuer ?? src?.issuer ?? null, date: src?.date ?? llm.date ?? null };
       });
 
       // Merge project data: LLM achievements (locale-aware) + structural fields from input
       parsed.resume_data.projects = input.resume_json.projects.map((src, i) => {
-        const llm = (parsed.resume_data.projects ?? [])[i];
+        const llm = object.resume_data.projects[i];
         return {
           name: src.name,
           period: src.period,
@@ -338,17 +385,13 @@ async function generateResumeDirect(input: OptimizedResumeInput): Promise<Optimi
       });
 
       parsed.markdown = renderMarkdown(parsed.resume_data, language);
-      parsed.meta = {
-        generated_at: new Date().toISOString(),
-        language,
-        keywords_applied: parsed.meta?.keywords_applied ?? [],
-      };
+      parsed.meta.generated_at = new Date().toISOString();
 
       return parsed;
     } catch (err: any) {
       lastError = err?.message ?? String(err);
       const status: number = err?.status ?? err?.statusCode ?? 0;
-      const isRetryable = status === 429 || status >= 500 || lastError.includes("JSON");
+      const isRetryable = status === 429 || status >= 500 || NoObjectGeneratedError.isInstance(err);
       if (!isRetryable) break;
       await new Promise(r => setTimeout(r, Math.min(2000 * Math.pow(2, attempt), 30_000)));
     }
