@@ -2,6 +2,32 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
+type DbError = {
+  code?: string;
+  message?: string;
+};
+
+function isPlanLimitError(error: DbError) {
+  return (
+    error.code === "23514" ||
+    error.message?.toLowerCase().includes("career plan limit")
+  );
+}
+
+/** Rolls back the just-created career_plans row and reports a 500 — shared by every insert
+ *  after step 1, since any of them failing must not leave an orphaned plan row behind. */
+async function failInsert(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  label: string,
+  error: unknown,
+  planId: string,
+  userId: string
+) {
+  console.error(`[/api/career-plans] ${label} insert failed:`, error);
+  await supabase.from("career_plans").delete().eq("id", planId).eq("user_id", userId);
+  return NextResponse.json({ error: "Failed to save career plan" }, { status: 500 });
+}
+
 const TodoItemSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -113,18 +139,15 @@ export async function POST(request: Request) {
     .single();
 
   if (planError) {
-    // Trigger violation: career plan limit reached (check_violation = 23514)
-    if (
-      planError.code === "23514" ||
-      planError.message?.toLowerCase().includes("career plan limit")
-    ) {
+    if (isPlanLimitError(planError)) {
       return NextResponse.json({ error: "plan_limit_reached" }, { status: 409 });
     }
+    console.error("[/api/career-plans] career_plans insert failed:", planError);
     return NextResponse.json({ error: "Failed to save career plan" }, { status: 500 });
   }
 
   // 2. Insert gap_analyses
-  const { data: gap } = await supabase
+  const { data: gap, error: gapError } = await supabase
     .from("gap_analyses")
     .insert({
       career_plan_id: plan.id,
@@ -140,8 +163,12 @@ export async function POST(request: Request) {
     .select("id")
     .single();
 
+  if (gapError) {
+    return failInsert(supabase, "gap_analyses", gapError, plan.id, user.id);
+  }
+
   // 3. Insert roadmaps
-  const { data: roadmap } = await supabase
+  const { data: roadmap, error: roadmapError } = await supabase
     .from("roadmaps")
     .insert({
       career_plan_id: plan.id,
@@ -154,6 +181,10 @@ export async function POST(request: Request) {
     })
     .select("id")
     .single();
+
+  if (roadmapError) {
+    return failInsert(supabase, "roadmaps", roadmapError, plan.id, user.id);
+  }
 
   // 4. Bulk insert weekly_tasks
   if (roadmap) {
@@ -168,7 +199,10 @@ export async function POST(request: Request) {
       action_items: week.todos,
     }));
 
-    await supabase.from("weekly_tasks").insert(weeklyTaskRows);
+    const { error: weeklyTasksError } = await supabase.from("weekly_tasks").insert(weeklyTaskRows);
+    if (weeklyTasksError) {
+      return failInsert(supabase, "weekly_tasks", weeklyTasksError, plan.id, user.id);
+    }
   }
 
   return NextResponse.json({ career_plan_id: plan.id }, { status: 201 });

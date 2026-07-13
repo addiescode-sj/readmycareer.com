@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { SignOutButton } from "@/components/dashboard/SignOutButton";
 import { Logo } from "@/components/ui/Logo";
+import { clearPlanSaveState } from "@/lib/plan-save-session";
 
 interface Props {
   open: boolean;
@@ -93,7 +94,7 @@ export default function AppSidebar({ open, onToggle }: Props) {
         <button
           onClick={() => {
             sessionStorage.removeItem("rmc_session");
-            sessionStorage.removeItem("rmc_plan_saved");
+            clearPlanSaveState();
             window.location.href = "/?new=true";
           }}
           title={!open ? t("newPlan") : undefined}

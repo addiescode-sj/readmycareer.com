@@ -4,6 +4,15 @@ import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { SessionProvider, useSession } from "@/hooks/useSession";
 import { createClient } from "@/lib/supabase/client";
+import {
+  beginPlanSave,
+  finishPlanSave,
+  isPlanSaved,
+  isPlanSaveBlockedByLimit,
+  markPlanSaveLimitReached,
+  markPlanSaveSucceeded,
+  PLAN_LIMIT_REACHED,
+} from "@/lib/plan-save-session";
 import InitializeWorkspace from "@/components/InitializeWorkspace";
 import RoadmapView from "@/components/RoadmapView";
 
@@ -29,8 +38,10 @@ function PlanSaveHeader() {
   const supabase = createClient();
 
   useEffect(() => {
-    if (sessionStorage.getItem("rmc_plan_saved") === "true") {
+    if (isPlanSaved()) {
       setSaveStatus("saved");
+    } else if (isPlanSaveBlockedByLimit()) {
+      setSaveStatus("limit_reached");
     }
 
     supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
@@ -41,7 +52,7 @@ function PlanSaveHeader() {
 
         const shouldSave = (event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user && careerPlan && jdText;
         if (shouldSave) {
-          if (sessionStorage.getItem("rmc_plan_saved") === "true") return;
+          if (!beginPlanSave()) return;
           setSaveStatus("saving");
           try {
             const res = await fetch("/api/career-plans", {
@@ -57,13 +68,20 @@ function PlanSaveHeader() {
               }),
             });
             if (res.ok) {
-              sessionStorage.setItem("rmc_plan_saved", "true");
+              markPlanSaveSucceeded();
               setSaveStatus("saved");
             } else {
               const body = await res.json().catch(() => ({})) as Record<string, string>;
-              setSaveStatus(body["error"] === "plan_limit_reached" ? "limit_reached" : "error");
+              if (body["error"] === PLAN_LIMIT_REACHED) {
+                markPlanSaveLimitReached();
+                setSaveStatus("limit_reached");
+              } else {
+                finishPlanSave();
+                setSaveStatus("error");
+              }
             }
           } catch {
+            finishPlanSave();
             setSaveStatus("error");
           }
         }

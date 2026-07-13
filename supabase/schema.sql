@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS career_plans (
   target_company  TEXT        NOT NULL DEFAULT '',
   jd_text         TEXT        NOT NULL
                               CHECK (char_length(jd_text) >= 50 AND char_length(jd_text) <= 10000),
+  resume_json     JSONB,
   duration_weeks  INTEGER     NOT NULL CHECK (duration_weeks BETWEEN 1 AND 52),
   start_date      DATE        NOT NULL,
   end_date        DATE,

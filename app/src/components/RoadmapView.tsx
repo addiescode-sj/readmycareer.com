@@ -4,6 +4,15 @@ import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/hooks/useSession";
+import {
+  beginPlanSave,
+  finishPlanSave,
+  isPlanSaved,
+  isPlanSaveBlockedByLimit,
+  markPlanSaveLimitReached,
+  markPlanSaveSucceeded,
+  PLAN_LIMIT_REACHED,
+} from "@/lib/plan-save-session";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown } from "lucide-react";
@@ -275,8 +284,10 @@ function SaveBanner() {
 
   useEffect(() => {
     // Restore saved state from this browser session
-    if (sessionStorage.getItem("rmc_plan_saved") === "true") {
+    if (isPlanSaved()) {
       setSaveStatus("saved");
+    } else if (isPlanSaveBlockedByLimit()) {
+      setSaveStatus("limit_reached");
     }
 
     supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
@@ -287,9 +298,10 @@ function SaveBanner() {
 
         // Auto-save when user signs in and plan is ready in session
         if (event === "SIGNED_IN" && session?.user && careerPlan) {
-          if (sessionStorage.getItem("rmc_plan_saved") === "true") return;
+          if (!beginPlanSave()) return;
           if (!jdText) {
             // Old session without jdText — can't save
+            finishPlanSave();
             setSaveStatus("error");
             return;
           }
@@ -310,13 +322,20 @@ function SaveBanner() {
             });
 
             if (res.ok) {
-              sessionStorage.setItem("rmc_plan_saved", "true");
+              markPlanSaveSucceeded();
               setSaveStatus("saved");
             } else {
               const body = await res.json().catch(() => ({})) as Record<string, string>;
-              setSaveStatus(body["error"] === "plan_limit_reached" ? "limit_reached" : "error");
+              if (body["error"] === PLAN_LIMIT_REACHED) {
+                markPlanSaveLimitReached();
+                setSaveStatus("limit_reached");
+              } else {
+                finishPlanSave();
+                setSaveStatus("error");
+              }
             }
           } catch {
+            finishPlanSave();
             setSaveStatus("error");
           }
         }
@@ -339,6 +358,7 @@ function SaveBanner() {
 
   async function retrySave() {
     if (!careerPlan || !jdText) return;
+    if (!beginPlanSave()) return;
     setSaveStatus("saving");
     try {
       const res = await fetch("/api/career-plans", {
@@ -354,13 +374,20 @@ function SaveBanner() {
         }),
       });
       if (res.ok) {
-        sessionStorage.setItem("rmc_plan_saved", "true");
+        markPlanSaveSucceeded();
         setSaveStatus("saved");
       } else {
         const body = await res.json().catch(() => ({})) as Record<string, string>;
-        setSaveStatus(body["error"] === "plan_limit_reached" ? "limit_reached" : "error");
+        if (body["error"] === PLAN_LIMIT_REACHED) {
+          markPlanSaveLimitReached();
+          setSaveStatus("limit_reached");
+        } else {
+          finishPlanSave();
+          setSaveStatus("error");
+        }
       }
     } catch {
+      finishPlanSave();
       setSaveStatus("error");
     }
   }

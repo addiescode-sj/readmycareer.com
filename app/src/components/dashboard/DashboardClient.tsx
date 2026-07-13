@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,6 +10,16 @@ import { useTranslations, useLocale } from "next-intl";
 
 import { CompetencyRadar } from "@/components/ui/CompetencyRadarLazy";
 import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  beginPlanSave,
+  clearPlanSaveLimitBlock,
+  clearPlanSaveState,
+  finishPlanSave,
+  isPlanSaveBlockedByLimit,
+  markPlanSaveLimitReached,
+  markPlanSaveSucceeded,
+  PLAN_LIMIT_REACHED,
+} from "@/lib/plan-save-session";
 import {
   careerPlansKey,
   useCareerPlans,
@@ -149,6 +159,9 @@ export function DashboardClient({ profile }: Props) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+  const [unsavedPlanError, setUnsavedPlanError] = useState<"limit_reached" | "missing_resume" | null>(
+    null
+  );
 
   // Refresh plans when page is restored from bfcache (browser back/forward)
   useEffect(() => {
@@ -161,46 +174,77 @@ export function DashboardClient({ profile }: Props) {
     return () => window.removeEventListener("pageshow", handlePageShow);
   }, [queryClient]);
 
-  // Save any plan that was created during the onboarding flow but not yet persisted
-  useEffect(() => {
-    async function syncUnsavedPlan() {
-      if (sessionStorage.getItem("rmc_plan_saved") === "true") return;
+  // Save any plan that was created during the onboarding flow but not yet persisted.
+  // Extracted as a stable callback (not just inline in the mount effect) so handleDelete can
+  // retry it after freeing up a plan slot — otherwise a limit-blocked save stays stuck until
+  // the user starts a brand new plan (see plan-save-session.ts's clearPlanSaveLimitBlock).
+  const syncUnsavedPlan = useCallback(async () => {
+    if (isPlanSaveBlockedByLimit()) {
+      setUnsavedPlanError("limit_reached");
+      return;
+    }
+    if (!beginPlanSave()) return;
 
-      const rawSession = sessionStorage.getItem("rmc_session");
-      if (!rawSession) return;
-
-      try {
-        const session = JSON.parse(rawSession);
-        const { careerPlan, jdText, targetRole, targetCompany, gapAnalysis } = session;
-        if (!careerPlan || !jdText) return;
-
-        sessionStorage.setItem("rmc_plan_saved", "true");
-
-        const res = await fetch("/api/career-plans", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            targetRole: targetRole ?? "",
-            targetCompany: targetCompany ?? "",
-            jdText,
-            careerPlan,
-            gapAnalysis: gapAnalysis ?? {},
-          }),
-        });
-
-        if (res.ok) {
-          queryClient.invalidateQueries({ queryKey: careerPlansKey() });
-        } else {
-          sessionStorage.removeItem("rmc_plan_saved");
-        }
-      } catch (e) {
-        console.error("Failed to sync unsaved plan", e);
-        sessionStorage.removeItem("rmc_plan_saved");
-      }
+    const rawSession = sessionStorage.getItem("rmc_session");
+    if (!rawSession) {
+      finishPlanSave();
+      return;
     }
 
-    syncUnsavedPlan();
+    try {
+      const session = JSON.parse(rawSession);
+      const { careerPlan, jdText, targetRole, targetCompany, gapAnalysis, resumeJson } = session;
+      if (!careerPlan || !jdText) {
+        finishPlanSave();
+        return;
+      }
+
+      // useSession() deliberately never persists resumeJson to sessionStorage (kept in-memory
+      // only), and this recovery path only has sessionStorage to read from — so resumeJson is
+      // never actually available here. Saving anyway would silently create a plan with
+      // resume_json = null, which permanently breaks /api/resume-optimizer for it later. Block
+      // instead of writing a plan we know is missing data.
+      if (!resumeJson) {
+        finishPlanSave();
+        setUnsavedPlanError("missing_resume");
+        return;
+      }
+
+      const res = await fetch("/api/career-plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetRole: targetRole ?? "",
+          targetCompany: targetCompany ?? "",
+          jdText,
+          resumeJson,
+          careerPlan,
+          gapAnalysis: gapAnalysis ?? {},
+        }),
+      });
+
+      if (res.ok) {
+        markPlanSaveSucceeded();
+        setUnsavedPlanError(null);
+        queryClient.invalidateQueries({ queryKey: careerPlansKey() });
+      } else {
+        const body = await res.json().catch(() => ({})) as Record<string, string>;
+        if (body["error"] === PLAN_LIMIT_REACHED) {
+          markPlanSaveLimitReached();
+          setUnsavedPlanError("limit_reached");
+        } else {
+          finishPlanSave();
+        }
+      }
+    } catch (e) {
+      console.error("Failed to sync unsaved plan", e);
+      finishPlanSave();
+    }
   }, [queryClient]);
+
+  useEffect(() => {
+    syncUnsavedPlan();
+  }, [syncUnsavedPlan]);
 
   function startEditTitle(plan: CareerPlanRow, e: React.MouseEvent) {
     e.stopPropagation();
@@ -223,12 +267,18 @@ export function DashboardClient({ profile }: Props) {
   async function handleDelete(planId: string) {
     await deletePlan.mutateAsync(planId);
     setConfirmDeleteId(null);
+    // Deleting a plan frees a slot — retry a save that was previously blocked by the 3-plan limit.
+    if (unsavedPlanError === "limit_reached") {
+      clearPlanSaveLimitBlock();
+      setUnsavedPlanError(null);
+      syncUnsavedPlan();
+    }
   }
 
   function handleNewPlan(e: React.MouseEvent) {
     e.preventDefault();
     sessionStorage.removeItem("rmc_session");
-    sessionStorage.removeItem("rmc_plan_saved");
+    clearPlanSaveState();
     router.push("/?new=true");
   }
 
@@ -259,6 +309,18 @@ export function DashboardClient({ profile }: Props) {
           </div>
         }
       />
+
+      {unsavedPlanError === "limit_reached" && (
+        <div className="mb-8 rounded-2xl border border-yellow-200 bg-yellow-50 px-6 py-4 text-sm text-yellow-900">
+          {t("planLimitReached")}
+        </div>
+      )}
+
+      {unsavedPlanError === "missing_resume" && (
+        <div className="mb-8 rounded-2xl border border-yellow-200 bg-yellow-50 px-6 py-4 text-sm text-yellow-900">
+          {t("planMissingResume")}
+        </div>
+      )}
 
       {/* Plan list */}
       {plans.length === 0 ? (
