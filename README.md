@@ -189,10 +189,12 @@ Each step runs inside a **quality gate loop** (up to 3 retries) that validates s
 
 ## Model Strategy & Trade-offs
 
-All agents default to **Gemini 3.1 Flash Lite Preview** — chosen for its free tier, native
+Most agents default to **Gemini 3.1 Flash Lite Preview** — chosen for its free tier, native
 multimodal capability (a foundation for richer resume/portfolio parsing), and very low
 per-token cost. Output quality is held by the retry-based quality gate, so a small, fast model
-is sufficient for the structured-extraction and planning tasks.
+is sufficient for the structured-extraction and planning tasks. The two reasoning-heavy synthesis
+stages (gap analysis, resume optimization) run on a stronger model — see "Reasoning-tier model"
+below.
 
 The LLM call path is abstracted behind a provider-agnostic `ModelAdapter`
 ([agents/lib/model-adapter.ts](./agents/lib/model-adapter.ts)), so a provider can be swapped
@@ -219,6 +221,78 @@ pnpm --filter @readmycareer/eval compare-models   # quality / latency / cost, si
 > **In one line:** Gemini Flash Lite for cost and multimodal breadth by default; switch a stage
 > to OpenAI/Claude when output quality on a hard case justifies the higher per-token cost. The
 > adapter makes that a one-line change, and `model_comparison.ts` produces the numbers to back it.
+
+### Reasoning-tier model
+
+Gap analysis and resume optimization are reasoning-heavy synthesis stages, so they run on
+`GEMINI_MODEL_REASONING` (default `gemini-2.5-flash`) instead of the flash-lite default. **Gemini
+Pro models are not available on the free tier** — 2.5 Flash is the strongest model reachable
+without enabling billing; confirm this still holds before relying on the default in production.
+Planning and chat stay on `GEMINI_MODEL` (flash-lite) — see
+[agents/lib/models.ts](./agents/lib/models.ts).
+
+### Vercel AI SDK adoption (in progress)
+
+The LLM call path is being migrated to the [Vercel AI SDK](https://ai-sdk.dev/) (`ai` +
+`@ai-sdk/google`) for model neutrality and native streaming/generative-UI support. This is an
+**incremental migration** — done and pending pieces below, kept up to date as it progresses:
+
+**Done:**
+- [app/src/app/api/chat/route.ts](./app/src/app/api/chat/route.ts) — rewritten on `streamText` +
+  `toUIMessageStreamResponse()`. RAG moved from "always search before the model runs" to a
+  `search_reference` tool the model calls agentically (generative UI renders the call/result
+  inline), and `providerOptions.google.thinkingConfig` streams reasoning as a `reasoning` UI part.
+  The full conversation is now sent as `ModelMessage`s via `convertToModelMessages` instead of a
+  single string prompt with no prior turns (a latent bug in the old raw-SSE implementation).
+- [app/src/hooks/useCareerCoachChat.ts](./app/src/hooks/useCareerCoachChat.ts) — a shared hook
+  wrapping `@ai-sdk/react`'s `useChat`, used by all three chat surfaces
+  (`AICoachChat`/`ChatInterface`/`ChatHistoryClient`). Seeds history from Supabase (via
+  `useChatMessages`) and persists each finished turn back to `chat_messages` in `onFinish`.
+- [app/src/components/chat/ChatMessageParts.tsx](./app/src/components/chat/ChatMessageParts.tsx) —
+  one shared renderer for a `UIMessage`'s parts (markdown text, collapsible reasoning block,
+  `search_reference` source card) instead of three copies of the same markdown/bounce-dot JSX.
+- [agents/resume-optimizer/index.ts](./agents/resume-optimizer/index.ts) — uses `generateObject`
+  against a Zod schema instead of a raw JSON-mode call + manual fence-stripping/parsing.
+- **Removed the entire Google ADK layer** (`LlmAgent`/`Runner`/`InMemorySessionService`/
+  `FunctionTool`/`AgentTool`) — it turned out to be dead code, not a pending migration. The
+  ADK-based `ChatQnAAgent` + `runChatQnA` (`agents/chat-qna/`) had zero callers — `/api/chat` has
+  always inlined its own Gemini + RAG logic, never the ADK path. `GapAnalyzerAgent`/`runGapAnalyzer`
+  and `PlannerAgent`/`runPlanner` were the same: standalone dev-only `Runner` wrappers with no
+  callers — the live `runCareerAnalysis` pipeline has only ever called the model directly through
+  `ModelAdapter`, using just the instruction strings (`getGapAnalyzerInstruction`,
+  `PLANNER_INSTRUCTION`) those files still export. Deleted `agents/chat-qna/` entirely, trimmed
+  `gap-analyzer/`/`planner/`/`orchestrator.ts` to the code actually on the live path, and dropped
+  the now-unused `@google/adk` dependency and `SESSION_KEYS`/`ChatMessage`/`ChatQnAInput`/
+  `ChatQnAOutput`/`PlannerInput` types.
+- **Durable career-analysis job checkpoints (Part D)**: `career_plan_jobs`
+  ([supabase/migrations/20260713000000_add_career_plan_jobs.sql](./supabase/migrations/20260713000000_add_career_plan_jobs.sql))
+  gives `/api/analyze` a checkpoint after gap analysis (and again on completion), so a client
+  that reconnects with the `jobId` from the initial `job` SSE event can resume straight into
+  planning instead of re-running the gap-analysis LLM call.
+  [agents/orchestrator.ts](./agents/orchestrator.ts)'s `runCareerAnalysis` gained an optional
+  `checkpoint` param (`precomputedGapAnalysis` to skip Step 1, `onGapAnalysisComplete` to
+  checkpoint a freshly computed one); the frontend
+  ([app/src/components/InitializeWorkspace.tsx](./app/src/components/InitializeWorkspace.tsx))
+  only reuses a `jobId` on retry if the JD/role/duration are unchanged from when it was issued,
+  so an edited input never replays a stale checkpoint. **Scope, as agreed**: this is
+  client-reconnect resumability only — it does not make the serverless function itself survive
+  being killed mid-execution. Anonymous (unauthenticated) `/api/analyze` requests are not
+  checkpointed; job persistence is best-effort and never blocks the analysis response if it
+  fails (e.g. before the migration has been applied).
+
+**Pending — tracked here, not yet done:**
+- `GeminiAdapter` ([agents/lib/adapters/gemini-adapter.ts](./agents/lib/adapters/gemini-adapter.ts))
+  still calls `@google/generative-ai` directly, including the context-cache path
+  (`GoogleAICacheManager`). The AI SDK google provider exposes a `cachedContent` provider option,
+  but this needs verification against the adapter's cache-registry semantics before swapping —
+  don't blind-rewrite it.
+- The OpenAI adapter ([agents/lib/adapters/openai-adapter.ts](./agents/lib/adapters/openai-adapter.ts))
+  is not yet on `@ai-sdk/openai`.
+- The `career-plan-generator` MCP skill ([mcp-skills/career-plan-generator](./mcp-skills/career-plan-generator))
+  is now unreferenced by any live code path — its only caller was the deleted `PlannerAgent`
+  FunctionTool; the live planning step generates the plan via the reasoning-tier model directly,
+  with no MCP round-trip. Left in place pending a decision on whether to remove the skill package
+  or repurpose it.
 
 ---
 

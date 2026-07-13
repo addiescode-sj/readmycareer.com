@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Reasoning-tier model**: gap analysis and resume optimization now run on `GEMINI_MODEL_REASONING`
+  (default `gemini-2.5-flash`) instead of the shared flash-lite default — Gemini Pro models are not
+  available on the free tier, so 2.5 Flash is the strongest reachable model without enabling
+  billing. Planning and chat stay on `GEMINI_MODEL` (flash-lite). Pricing for the new model id is
+  in [config/model-pricing.json](config/model-pricing.json) ($0.30/$2.50 per 1M input/output).
+- **Vercel AI SDK adoption (incremental, in progress)**: [app/src/app/api/chat/route.ts](app/src/app/api/chat/route.ts)'s
+  Gemini call now goes through `streamText` (`ai` + `@ai-sdk/google`) instead of the raw
+  `@google/generative-ai` SDK; [agents/resume-optimizer/index.ts](agents/resume-optimizer/index.ts)
+  now uses `generateObject` against a Zod schema instead of manual JSON-fence-stripping. See
+  README "Vercel AI SDK adoption" for the full done/pending checklist — the `GeminiAdapter`
+  context-cache path and the OpenAI adapter are intentionally not touched yet.
+- **Unified chat UI on `@ai-sdk/react`'s `useChat`**: all three chat surfaces
+  (`AICoachChat`, `ChatInterface`, `ChatHistoryClient`) now share one hook
+  ([app/src/hooks/useCareerCoachChat.ts](app/src/hooks/useCareerCoachChat.ts)) and one message
+  renderer ([app/src/components/chat/ChatMessageParts.tsx](app/src/components/chat/ChatMessageParts.tsx))
+  instead of three hand-rolled `fetch` + manual SSE-parsing implementations.
+  `/api/chat` now returns `streamText(...).toUIMessageStreamResponse()` instead of a custom
+  `data: {"text":...}` SSE format, and sends the full conversation history as `ModelMessage`s via
+  `convertToModelMessages` (previously only the latest message was sent — prior turns were not in
+  the model's context at all).
+  - **Generative UI**: RAG search moved from "always run before the model sees the question" to
+    a `search_reference` tool the model calls agentically; the tool call and its results render
+    inline as a source card.
+  - **Reasoning visibility**: `providerOptions.google.thinkingConfig` (`includeThoughts: true`)
+    streams Gemini's thinking as a `reasoning` UI part, rendered as a collapsible "thought
+    process" block.
+  - Verified live end-to-end against `/api/chat` (real Gemini + Pinecone credentials): reasoning
+    stream → `search_reference` tool call → real RAG results → grounded final answer, in the
+    correct `UIMessageStream` event order.
+- **Durable career-analysis job checkpoints**: new `career_plan_jobs` table
+  ([supabase/migrations/20260713000000_add_career_plan_jobs.sql](supabase/migrations/20260713000000_add_career_plan_jobs.sql))
+  lets `/api/analyze` checkpoint the gap-analysis result (and the final plan) per run. The route
+  now emits a `job` SSE event with a `jobId`; a retry that sends it back as `resumeJobId` skips
+  straight to planning instead of re-running gap analysis, or replays the stored result outright
+  if the run had already finished. `runCareerAnalysis` gained an optional `checkpoint` param
+  (`precomputedGapAnalysis` / `onGapAnalysisComplete`) to support this without disturbing its
+  existing context-cache warm-up. Scope is client-reconnect resumability only, as agreed — not
+  surviving the serverless function dying mid-execution. Anonymous requests aren't checkpointed;
+  all job persistence is best-effort and never blocks the analysis response on failure.
+
+### Removed
+
+- **Dead Google ADK layer**: `agents/chat-qna/` (the `ChatQnAAgent` `LlmAgent` + `runChatQnA` ADK
+  `Runner`/`InMemorySessionService` path) deleted outright — it had zero callers; `/api/chat` has
+  always used its own inlined Gemini + RAG logic instead. `GapAnalyzerAgent`/`runGapAnalyzer`
+  (gap-analyzer) and `PlannerAgent`/`runPlanner` (planner) were the same shape — standalone
+  ADK `Runner` wrappers with no callers, since the live `runCareerAnalysis` pipeline talks to the
+  model directly through `ModelAdapter` and only ever consumed the instruction-string exports
+  those files still provide. Also dropped: the `@google/adk` dependency (now fully unused), the
+  `SESSION_KEYS`/`ChatMessage`/`ChatQnAInput`/`ChatQnAOutput`/`PlannerInput` types, and the
+  `"./chat-qna"` entry in `agents/package.json`'s exports map. Net effect: 536 deletions / 15
+  insertions across `agents/{chat-qna,gap-analyzer,planner,orchestrator.ts,types.ts,package.json}`,
+  no behavior change (nothing invoked any of it).
+
+### Changed
+
+- `GEMINI_MODEL_PRO` renamed to `GEMINI_MODEL_REASONING` in [agents/lib/models.ts](agents/lib/models.ts)
+  (its default was previously `gemini-3.1-pro-preview`, which is not actually available without
+  billing enabled — the old name and default were both wrong).
+
+---
+
 ## [0.7.0] - 2026-06-16
 
 ### Changed
