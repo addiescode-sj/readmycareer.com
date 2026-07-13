@@ -16,6 +16,6 @@
     "eval:fast": "pnpm --filter @readmycareer/eval eval:fast"
   },
   "engines": {
-    "node": ">=20.12.0"
+    "node": ">=22.0.0"
   }
 }

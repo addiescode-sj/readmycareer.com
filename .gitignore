@@ -147,6 +147,9 @@ documents/
 # Secrets
 readmycareer-c547f96903fa.json
 
+# Local Codex CLI MCP config — contains a plaintext SUPABASE_ACCESS_TOKEN
+.codex/
+
 # OS metadata
 .DS_Store
 Thumbs.db
