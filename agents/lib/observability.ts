@@ -7,7 +7,7 @@
 // the orchestrator hands each metric to an onMetric callback that the route writes to Supabase.
 
 import type { ModelProvider } from "./model-adapter.js";
-import { MODEL_PRICING } from "./models.js";
+import { FALLBACK_PRICING_BY_PROVIDER, MODEL_PRICING } from "./models.js";
 
 export type AgentStage =
   | "gap_analysis"
@@ -32,13 +32,15 @@ export interface AgentRunMetric {
 }
 
 export function estimateCostUsd(
+  model: string,
   provider: string,
   promptTokens: number,
   completionTokens: number
 ): number {
-  // Rates come from the shared source config/model-pricing.json (via models.ts); the eval
+  // Rates come from the shared source config/model-pricing.json (via models.ts), keyed by
+  // model id since different models on the same provider have different prices; the eval
   // harness reads the same file, so live /admin cost reconciles with offline eval by design.
-  const rate = MODEL_PRICING[provider as ModelProvider] ?? MODEL_PRICING.gemini;
+  const rate = MODEL_PRICING[model] ?? FALLBACK_PRICING_BY_PROVIDER[provider as ModelProvider];
   return (promptTokens / 1e6) * rate.input + (completionTokens / 1e6) * rate.output;
 }
 
@@ -102,7 +104,12 @@ export function recordAgentRun(metric: AgentRunMetric): void {
   agg.promptTokens += metric.promptTokens;
   agg.completionTokens += metric.completionTokens;
   agg.cachedTokens += metric.cachedTokens;
-  agg.estCostUsd += estimateCostUsd(metric.provider, metric.promptTokens, metric.completionTokens);
+  agg.estCostUsd += estimateCostUsd(
+    metric.model,
+    metric.provider,
+    metric.promptTokens,
+    metric.completionTokens
+  );
   stageAggs.set(metric.stage, agg);
 
   recentRuns.push(metric);

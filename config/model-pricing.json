@@ -1,5 +1,6 @@
 {
-  "_comment": "Single source of truth for per-1M-token USD list prices, read by both the TypeScript agent layer (agents/lib/models.ts) and the TypeScript eval harness (eval/src/lib/pricing.ts). Update prices here only.",
-  "gemini": { "input": 0.075, "output": 0.3 },
-  "openai": { "input": 0.15, "output": 0.6 }
+  "_comment": "Single source of truth for per-1M-token USD list prices, keyed by model id (not provider — different models on the same provider have different prices). Read by both the TypeScript agent layer (agents/lib/models.ts) and the TypeScript eval harness (eval/src/lib/pricing.ts). Update prices here only.",
+  "gemini-3.1-flash-lite-preview": { "input": 0.075, "output": 0.3 },
+  "gemini-2.5-flash": { "input": 0.3, "output": 2.5 },
+  "gpt-4o-mini": { "input": 0.15, "output": 0.6 }
 }

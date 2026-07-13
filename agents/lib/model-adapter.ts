@@ -17,6 +17,9 @@ export interface GenerateOptions {
   // Provider-specific cached-content handle (e.g. a Gemini context cache name).
   // Ignored by providers that do not support caching.
   cachedContentName?: string | null;
+  // When provided, the adapter streams partial tokens to this callback as they arrive.
+  // The returned LlmResult.text is still the complete accumulated response.
+  onToken?: (chunk: string) => void;
 }
 
 export interface LlmUsage {
@@ -58,10 +61,13 @@ export const ZERO_USAGE: LlmUsage = {
  * and so a missing optional dependency cannot break the default path.
  *
  * Provider resolution: explicit arg → MODEL_PROVIDER env → "gemini".
+ * `model` overrides the default Gemini model id for this adapter instance (e.g. a
+ * reasoning-heavy stage requesting the Pro tier); ignored for the OpenAI path.
  */
 export async function getModelAdapter(
   provider?: ModelProvider,
-  apiKey?: string
+  apiKey?: string,
+  model?: string
 ): Promise<ModelAdapter> {
   const resolved =
     provider ?? (process.env.MODEL_PROVIDER as ModelProvider | undefined) ?? "gemini";
@@ -72,5 +78,5 @@ export async function getModelAdapter(
   }
 
   const { GeminiAdapter } = await import("./adapters/gemini-adapter.js");
-  return new GeminiAdapter(apiKey);
+  return model ? new GeminiAdapter(apiKey, model) : new GeminiAdapter(apiKey);
 }

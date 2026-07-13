@@ -16,14 +16,11 @@ import type {
 } from "../model-adapter.js";
 import { GEMINI_MODEL } from "../models.js";
 
-// Resolved from the shared model registry (env-overridable via GEMINI_MODEL).
-const MODEL_NAME = GEMINI_MODEL;
-
 /** Max retry attempts for API 429/5xx errors. */
 const MAX_API_RETRIES = 3;
 
 /** Overall wall-clock timeout per generateContent call (ms). Guards against hung connections. */
-const GEMINI_CALL_TIMEOUT_MS = 30_000;
+const GEMINI_CALL_TIMEOUT_MS = 45_000;
 
 /** Context cache TTL in seconds. Reuses the cache for re-analysis of the same resume. */
 const CACHE_TTL_SECONDS = 3600; // 1 hour
@@ -39,9 +36,11 @@ const cacheRegistry = new Map<string, { cacheName: string; expiresAt: number }>(
 // In-flight creations (deduplicates concurrent createCache calls for the same key).
 const inFlightCacheCreations = new Map<string, Promise<string | null>>();
 
-function hashResume(systemInstruction: string, resumeJson: unknown): string {
+// Includes the model id: a Gemini context cache is bound to the model it was created with,
+// so caches for different model tiers (e.g. flash-lite vs pro) must not collide/be reused.
+function hashResume(model: string, systemInstruction: string, resumeJson: unknown): string {
   return createHash("sha256")
-    .update(systemInstruction + JSON.stringify(resumeJson))
+    .update(model + systemInstruction + JSON.stringify(resumeJson))
     .digest("hex")
     .slice(0, 32);
 }
@@ -51,21 +50,35 @@ function exponentialDelay(attempt: number, baseMs = 2000, maxMs = 60_000): numbe
   return Math.min(baseMs * Math.pow(2, attempt) + Math.random() * 1000, maxMs);
 }
 
+// Guards against hung connections that would otherwise block the SSE stream until the client disconnects.
+function withTimeout<T>(op: Promise<T>): Promise<T> {
+  return Promise.race([
+    op,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Gemini call exceeded ${GEMINI_CALL_TIMEOUT_MS}ms`)),
+        GEMINI_CALL_TIMEOUT_MS
+      )
+    ),
+  ]);
+}
+
 export class GeminiAdapter implements ModelAdapter {
   readonly provider: ModelProvider = "gemini";
-  readonly model = MODEL_NAME;
+  readonly model: string;
   readonly supportsContextCache = true;
   private readonly apiKey: string;
 
-  constructor(apiKey?: string) {
+  constructor(apiKey?: string, model: string = GEMINI_MODEL) {
     const key = apiKey ?? process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY;
     if (!key) throw new Error("GOOGLE_API_KEY or GEMINI_API_KEY is not set.");
     this.apiKey = key;
+    this.model = model;
   }
 
   async getOrCreateCache(opts: CacheOptions): Promise<string | null> {
     const { systemInstruction, resumeJson } = opts;
-    const key = hashResume(systemInstruction, resumeJson);
+    const key = hashResume(this.model, systemInstruction, resumeJson);
 
     // Deduplicate concurrent creations for the same key — without this, the two parallel
     // cache warm-ups in runCareerAnalysis would both create caches.
@@ -83,7 +96,7 @@ export class GeminiAdapter implements ModelAdapter {
       try {
         const cacheManager = new GoogleAICacheManager(this.apiKey);
         const cache = await cacheManager.create({
-          model: MODEL_NAME,
+          model: this.model,
           contents: [
             {
               role: "user",
@@ -140,6 +153,7 @@ export class GeminiAdapter implements ModelAdapter {
       // topP 0.85: retains semantic flexibility for abbreviation/synonym matching.
       temperature = 0.2,
       topP = 0.85,
+      onToken,
     } = opts;
     const genai = new GoogleGenerativeAI(this.apiKey);
 
@@ -150,34 +164,52 @@ export class GeminiAdapter implements ModelAdapter {
           maxOutputTokens,
           temperature,
           topP,
-        };
+          // ponytail: disable thinking for JSON extraction stages; thinking tokens add
+          // 20-60s latency on gemini-2.5-flash with no benefit when the output is structured JSON.
+          thinkingConfig: { thinkingBudget: 0 },
+        } as any;
 
-        const generate = cachedContentName
-          ? genai
-              .getGenerativeModel({ model: MODEL_NAME })
-              .generateContent({
-                contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-                cachedContent: cachedContentName,
-                generationConfig,
-              } as any)
-          : genai
-              .getGenerativeModel({ model: MODEL_NAME, systemInstruction })
-              .generateContent({
-                contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-                generationConfig,
-              });
+        const modelInstance = cachedContentName
+          ? genai.getGenerativeModel({ model: this.model })
+          : genai.getGenerativeModel({ model: this.model, systemInstruction });
 
-        // Wall-clock timeout — protects against hung connections that would otherwise
-        // block the SSE stream until the client disconnects.
-        const result: any = await Promise.race([
-          generate,
-          new Promise((_, reject) =>
-            setTimeout(
-              () => reject(new Error(`Gemini call exceeded ${GEMINI_CALL_TIMEOUT_MS}ms`)),
-              GEMINI_CALL_TIMEOUT_MS
-            )
-          ),
-        ]);
+        const requestContents = [{ role: "user" as const, parts: [{ text: userPrompt }] }];
+        const requestConfig = cachedContentName
+          ? { contents: requestContents, cachedContent: cachedContentName, generationConfig } as any
+          : { contents: requestContents, generationConfig };
+
+        if (onToken) {
+          // Streaming path: forward partial tokens to caller, accumulate for final return.
+          return await withTimeout((async (): Promise<LlmResult> => {
+            const streamResult = await modelInstance.generateContentStream(requestConfig);
+            let fullText = "";
+            for await (const chunk of streamResult.stream) {
+              const chunkText = chunk.text();
+              if (chunkText) {
+                fullText += chunkText;
+                onToken(chunkText);
+              }
+            }
+            const response = await streamResult.response;
+            const usage = response.usageMetadata;
+            if (usage) {
+              console.log(
+                `[GEMINI] Token usage: input=${usage.promptTokenCount}, output=${usage.candidatesTokenCount}, cache=${usage.cachedContentTokenCount ?? 0}`
+              );
+            }
+            return {
+              text: fullText || null,
+              usage: {
+                promptTokens: usage?.promptTokenCount ?? 0,
+                completionTokens: usage?.candidatesTokenCount ?? 0,
+                cachedTokens: usage?.cachedContentTokenCount ?? 0,
+              },
+            };
+          })());
+        }
+
+        // Non-streaming path (no onToken): collect full response in one shot.
+        const result: any = await withTimeout(modelInstance.generateContent(requestConfig));
 
         const text = result.response.text();
         const usage = result.response.usageMetadata;

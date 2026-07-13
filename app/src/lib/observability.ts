@@ -60,7 +60,7 @@ export function aggregateAgentRuns(rows: AgentRunRow[]): StageAggregate[] {
       totalTokens: promptTokens + completionTokens,
       cachedTokens: rs.reduce((s, r) => s + r.cached_tokens, 0),
       estCostUsd: rs.reduce(
-        (s, r) => s + estimateCostUsd(r.provider, r.prompt_tokens, r.completion_tokens),
+        (s, r) => s + estimateCostUsd(r.model, r.provider, r.prompt_tokens, r.completion_tokens),
         0
       ),
     };
