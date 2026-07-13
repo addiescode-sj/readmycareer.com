@@ -1,11 +1,4 @@
 import { randomUUID } from "crypto";
-import {
-  Runner,
-  InMemorySessionService,
-  isFinalResponse,
-  stringifyContent,
-} from "@google/adk";
-import { ChatQnAAgent } from "./chat-qna/index.js";
 import { getGapAnalyzerInstruction } from "./gap-analyzer/index.js";
 import { PLANNER_INSTRUCTION } from "./planner/index.js";
 import { runResumeOptimizer as _runResumeOptimizer } from "./resume-optimizer/index.js";
@@ -18,12 +11,11 @@ import {
   ZERO_USAGE,
 } from "./lib/model-adapter.js";
 import { AgentRunMetric, AgentStage, recordAgentRun } from "./lib/observability.js";
+import { GEMINI_MODEL_REASONING } from "./lib/models.js";
 import {
-  SESSION_KEYS,
   ResumeJson,
   JdSearchResult,
   CareerPlanOutput,
-  ChatQnAOutput,
   OptimizedResumeInput,
   OptimizedResumeOutput,
   omitPersonal,
@@ -385,7 +377,16 @@ export async function runCareerAnalysis(
   onProgress?: (step: string, detail?: string) => void,
   locale?: "ko" | "en",
   provider?: ModelProvider,
-  onMetric?: (m: AgentRunMetric) => void
+  onMetric?: (m: AgentRunMetric) => void,
+  // Checkpoint hooks for durable-job resumption (see app/src/app/api/analyze/route.ts).
+  // precomputedGapAnalysis skips Step 1 entirely when a caller already has a checkpointed
+  // result for this run; onGapAnalysisComplete lets the caller checkpoint a freshly computed one.
+  // onToken streams partial LLM output tokens to the caller for live UI rendering.
+  checkpoint?: {
+    precomputedGapAnalysis?: any;
+    onGapAnalysisComplete?: (gapAnalysisData: any) => void;
+    onToken?: (chunk: string) => void;
+  }
 ): Promise<CareerPlanOutput & { gap_analysis: any }> {
   const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   // Planning + context caches always run on Gemini, so the Google key is required even when
@@ -397,9 +398,11 @@ export async function runCareerAnalysis(
   // Resolve adapters. Gap analysis is the provider-swappable stage; planning stays on Gemini.
   // Building the gap adapter here surfaces a missing provider key (e.g. OPENAI_API_KEY) before
   // any work starts, so the failure is reported cleanly to the caller.
-  const geminiAdapter = await getModelAdapter("gemini", apiKey);
+  const geminiAdapter = await getModelAdapter("gemini", apiKey); // planner stays flash-lite
   const gapAdapter =
-    provider && provider !== "gemini" ? await getModelAdapter(provider) : geminiAdapter;
+    provider && provider !== "gemini"
+      ? await getModelAdapter(provider)
+      : await getModelAdapter("gemini", apiKey, GEMINI_MODEL_REASONING);
 
   // Declared as a leading directive so it appears before the JD text in every prompt.
   // Placing it after the JD risks the model matching the JD's language instead of the user's.
@@ -429,24 +432,31 @@ export async function runCareerAnalysis(
 
   // ── Step 1: Gap analysis (with quality gate) ─────────────────────────────
   // Uses the user-provided raw JD text directly for precise gap identification.
-  onProgress?.("gap_analysis");
-  console.log(`[ORCHESTRATOR] Step 1: Gap Analysis started (provider=${gapAdapter.provider})...`);
+  // Skipped entirely when the caller already has a checkpointed result for this run
+  // (durable-job resume — see the `checkpoint` param).
+  let gapAnalysisData: any;
+  if (checkpoint?.precomputedGapAnalysis) {
+    gapAnalysisData = checkpoint.precomputedGapAnalysis;
+    console.log("[ORCHESTRATOR] Step 1: Gap Analysis skipped (resumed from checkpoint)");
+  } else {
+    onProgress?.("gap_analysis");
+    console.log(`[ORCHESTRATOR] Step 1: Gap Analysis started (provider=${gapAdapter.provider})...`);
 
-  const gapAnalysisData = await instrumentStage<any>(
-    runId,
-    "gap_analysis",
-    gapAdapter,
-    () =>
-      runWithQualityGate<any>(
-        (retryFeedback) => {
-          // When no cache is available, include the full resume JSON inline so the model
-          // always has the data it needs. With a cache, the resume is already in context.
-          const resumeSection = gapCacheName
-            ? "(Resume JSON is included in the context cache above — use it for all phase comparisons.)"
-            : `## Resume JSON (use this for all phase comparisons):
+    gapAnalysisData = await instrumentStage<any>(
+      runId,
+      "gap_analysis",
+      gapAdapter,
+      () =>
+        runWithQualityGate<any>(
+          (retryFeedback) => {
+            // When no cache is available, include the full resume JSON inline so the model
+            // always has the data it needs. With a cache, the resume is already in context.
+            const resumeSection = gapCacheName
+              ? "(Resume JSON is included in the context cache above — use it for all phase comparisons.)"
+              : `## Resume JSON (use this for all phase comparisons):
 ${JSON.stringify(resumeForAnalysis, null, 2)}`;
 
-          const prompt = `
+            const prompt = `
 ${langDirective}
 
 Follow ALL 8 phases in your instruction exactly. Work through each phase in order.
@@ -476,24 +486,27 @@ ${jdText}
 ${retryFeedback}
 `.trim();
 
-          return gapAdapter.generateContent({
-            systemInstruction: gapInstruction,
-            userPrompt: prompt,
-            cachedContentName: gapCacheName,
-            maxOutputTokens: 8192,
-            temperature: 0.2,
-            topP: 0.85,
-          });
-        },
-        validateGapAnalysis,
-        "GapAnalysis"
-      ),
-    onMetric
-  );
+            return gapAdapter.generateContent({
+              systemInstruction: gapInstruction,
+              userPrompt: prompt,
+              cachedContentName: gapCacheName,
+              maxOutputTokens: 8192,
+              temperature: 0.2,
+              topP: 0.85,
+              onToken: checkpoint?.onToken,
+            });
+          },
+          validateGapAnalysis,
+          "GapAnalysis"
+        ),
+      onMetric
+    );
 
-  console.log(
-    `[ORCHESTRATOR] Step 1 complete — match_score=${gapAnalysisData.overall_match_score}, gaps=${gapAnalysisData.gaps?.length}`
-  );
+    console.log(
+      `[ORCHESTRATOR] Step 1 complete — match_score=${gapAnalysisData.overall_match_score}, gaps=${gapAnalysisData.gaps?.length}`
+    );
+    checkpoint?.onGapAnalysisComplete?.(gapAnalysisData);
+  }
 
   // ── Step 2: Career plan generation (with quality gate) ───────────────────
   // Uses gap analysis results + career trend reference documents from Vector DB.
@@ -599,70 +612,6 @@ ${retryFeedback}
   onProgress?.("done");
 
   return normalizePlan(careerPlanData, gapAnalysisData, durationWeeks, startDate);
-}
-
-// ── runChatQnA ────────────────────────────────────────────────────────────────
-
-export async function runChatQnA(
-  sessionContext: {
-    resume_json?: ResumeJson;
-    gap_analysis?: unknown;
-    career_plan?: CareerPlanOutput;
-    chat_history?: unknown[];
-  },
-  userMessage: string
-): Promise<ChatQnAOutput> {
-  const sessionService = new InMemorySessionService();
-  const runner = new Runner({
-    appName: "readmycareer",
-    agent: ChatQnAAgent,
-    sessionService,
-  });
-
-  const session = await sessionService.createSession({
-    appName: "readmycareer",
-    userId: "user",
-    state: {
-      [SESSION_KEYS.RESUME_JSON]: sessionContext.resume_json ?? null,
-      [SESSION_KEYS.GAP_ANALYSIS]: sessionContext.gap_analysis ?? null,
-      [SESSION_KEYS.CAREER_PLAN]: sessionContext.career_plan ?? null,
-      [SESSION_KEYS.CHAT_HISTORY]: sessionContext.chat_history ?? [],
-    },
-  });
-
-  let lastText: string | null = null;
-
-  for await (const event of runner.runAsync({
-    sessionId: session.id,
-    userId: "user",
-    newMessage: { parts: [{ text: userMessage }] },
-  })) {
-    if (isFinalResponse(event)) {
-      lastText = stringifyContent(event);
-    }
-  }
-
-  if (lastText) {
-    try {
-      return JSON.parse(lastText) as ChatQnAOutput;
-    } catch {
-      // Wrap plain text responses that are not valid JSON
-      return {
-        answer: lastText,
-        sources: [],
-        follow_up_suggestions: [],
-        updated_chat_history: [],
-      };
-    }
-  }
-
-  const finalSession = await sessionService.getSession({
-    appName: "readmycareer",
-    sessionId: session.id,
-    userId: "user",
-  });
-
-  return (finalSession?.state?.[SESSION_KEYS.CHAT_HISTORY] ?? {}) as ChatQnAOutput;
 }
 
 // ── runResumeOptimizer ────────────────────────────────────────────────────────

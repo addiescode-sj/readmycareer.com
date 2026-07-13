@@ -1,76 +1,10 @@
-import {
-  LlmAgent,
-  AgentTool,
-  FunctionTool,
-  Context,
-  isFinalResponse,
-  stringifyContent,
-} from "@google/adk";
-import { z } from "zod";
-import { callMcpTool } from "../lib/mcp-client.js";
-import { GEMINI_MODEL } from "../lib/models.js";
-import { GapAnalyzerAgent } from "../gap-analyzer/index.js";
-import {
-  SESSION_KEYS,
-  PlannerInput,
-  CareerPlanOutput,
-} from "../types.js";
-
-// ─── MCP Skill Tool: career-plan-generator.generate_plan ─────────────────────
-
-const generatePlanTool = new FunctionTool({
-  name: "generate_career_plan",
-  description:
-    "career-plan-generator MCP 스킬을 호출하여 갭 분석 결과로 주차별 플랜과 Timeline JSON을 생성합니다.",
-  parameters: z.object({
-    target_jd: z.object({
-      title: z.string(),
-      company: z.string().nullable(),
-      required_skills: z.array(z.string()),
-      preferred_skills: z.array(z.string()),
-    }),
-    gap_analysis: z.object({
-      gaps: z.array(
-        z.object({
-          id: z.string(),
-          category: z.enum(["skill", "experience", "certification", "portfolio", "keyword"]),
-          item: z.string(),
-          current_level: z.string().nullable(),
-          required_level: z.string().nullable(),
-          priority: z.enum(["high", "medium", "low"]),
-          requirement_type: z.enum(["required", "preferred"]).default("required"),
-          rationale: z.string(),
-        })
-      ),
-      strengths: z.array(z.string()),
-    }),
-    duration_weeks: z.number().int().min(1).max(52),
-    start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    existing_projects: z
-      .array(
-        z.object({
-          name: z.string(),
-          tech_stack: z.array(z.string()),
-          description: z.string().nullable(),
-          achievements: z.array(z.string()),
-          url: z.string().nullable(),
-        })
-      )
-      .optional()
-      .describe("User's existing side projects — passed through to MCP for project-leveraging tasks"),
-    preferences: z
-      .object({
-        hours_per_week: z.number().default(10),
-        learning_style: z.enum(["online_course", "book", "project", "mixed"]).default("mixed"),
-      })
-      .optional(),
-  }),
-  execute: async (args, _ctx?: Context) => {
-    return callMcpTool("career-plan-generator", "generate_plan", args as Record<string, unknown>);
-  },
-});
-
 // ─── Agent Instruction ────────────────────────────────────────────────────────
+//
+// Consumed by agents/orchestrator.ts's runCareerAnalysis, which calls the model
+// directly through the ModelAdapter — there is no live ADK LlmAgent/Runner for
+// planning. (An ADK-based PlannerAgent + runPlanner dev runner existed here
+// previously; both were dead code — no route or script called them — and were
+// removed along with the unused generate_career_plan MCP FunctionTool.)
 
 const INSTRUCTION = `
 당신은 커리어 플래닝 전문가입니다.
@@ -110,67 +44,4 @@ UI 렌더링을 위해 다음 JSON 스키마를 정확히 준수하세요:
 }
 `.trim();
 
-// ─── PlannerAgent ─────────────────────────────────────────────────────────────
-
 export { INSTRUCTION as PLANNER_INSTRUCTION };
-
-export const PlannerAgent = new LlmAgent({
-  name: "PlannerAgent",
-  model: GEMINI_MODEL,
-  description:
-    "GapAnalyzerAgent의 갭 분석 결과를 받아 주차별 커리어 플랜과 타임라인 JSON을 생성합니다.",
-  instruction: INSTRUCTION,
-  tools: [
-    generatePlanTool,
-    new AgentTool({ agent: GapAnalyzerAgent }),
-  ],
-  outputKey: SESSION_KEYS.CAREER_PLAN,
-  generateContentConfig: {
-    responseMimeType: "application/json",
-  },
-});
-
-// ─── Standalone Runner (for development / testing) ───────────────────────────
-
-export async function runPlanner(input: PlannerInput): Promise<CareerPlanOutput> {
-  const { Runner, InMemorySessionService } = await import("@google/adk");
-
-  const sessionService = new InMemorySessionService();
-  const runner = new Runner({
-    appName: "readmycareer",
-    agent: PlannerAgent,
-    sessionService: sessionService,
-  });
-
-  const session = await sessionService.createSession({
-    appName: "readmycareer",
-    userId: "system",
-    state: {
-      [SESSION_KEYS.GAP_ANALYSIS]: input.gap_analysis,
-      ...(input.resume_projects
-        ? { [SESSION_KEYS.RESUME_JSON]: { projects: input.resume_projects } }
-        : {}),
-    },
-  });
-
-  const prompt = `${input.duration_weeks}주 플랜을 시작일 ${input.start_date}로 생성해주세요.`;
-
-  for await (const event of runner.runAsync({
-    sessionId: session.id,
-    userId: "system",
-    newMessage: { parts: [{ text: prompt }] },
-  })) {
-    if (isFinalResponse(event)) {
-      const text = stringifyContent(event) || "{}";
-      return JSON.parse(text) as CareerPlanOutput;
-    }
-  }
-
-  const finalSession = await sessionService.getSession({
-    appName: "readmycareer",
-    sessionId: session.id,
-    userId: "system",
-  });
-
-  return finalSession!.state[SESSION_KEYS.CAREER_PLAN] as CareerPlanOutput;
-}

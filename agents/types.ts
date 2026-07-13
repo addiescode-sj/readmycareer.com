@@ -1,15 +1,5 @@
 // ─── Shared Types across all Sub-Agents ───────────────────────────────────────
-// This file defines session state keys and data types shared by all three agents.
-
-// ── Session State Keys ────────────────────────────────────────────────────────
-export const SESSION_KEYS = {
-  RESUME_JSON: "resume_json",
-  JD_TEXT: "jd_text",
-  GAP_ANALYSIS: "gap_analysis",
-  CAREER_PLAN: "career_plan",
-  CHAT_HISTORY: "chat_history",
-  OPTIMIZED_RESUME: "optimized_resume",
-} as const;
+// This file defines the I/O types shared by the agents.
 
 // ── Resume without personal info (used for gap analysis and career planning) ──
 export type ResumeJsonForAnalysis = Omit<ResumeJson, "personal">;
@@ -54,17 +44,6 @@ export interface GapItem {
 }
 
 // ── PlannerAgent I/O ──────────────────────────────────────────────────────────
-export interface PlannerInput {
-  gap_analysis: GapAnalysisOutput;
-  duration_weeks: number;
-  start_date: string;                    // YYYY-MM-DD
-  resume_projects?: ProjectEntry[];      // existing side projects to leverage in planning
-  preferences?: {
-    hours_per_week?: number;
-    learning_style?: "online_course" | "book" | "project" | "mixed";
-  };
-}
-
 export interface CareerPlanOutput {
   plan_id: string;
   created_at: string;
@@ -109,34 +88,6 @@ export interface TimelineData {
     end_week: number;
     category: GapItem["category"];
   }[];
-}
-
-// ── ChatQnAAgent I/O ──────────────────────────────────────────────────────────
-export interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  timestamp: string;
-}
-
-export interface ChatQnAInput {
-  user_message: string;
-  session_context: {
-    resume_json?: ResumeJson;
-    gap_analysis?: GapAnalysisOutput;
-    career_plan?: CareerPlanOutput;
-    chat_history?: ChatMessage[];
-  };
-}
-
-export interface ChatQnAOutput {
-  answer: string;
-  sources: {
-    type: "rag" | "gap_analysis" | "career_plan" | "resume";
-    excerpt: string;
-    doc_title?: string;
-  }[];
-  follow_up_suggestions: string[];
-  updated_chat_history: ChatMessage[];
 }
 
 // ── Shared Domain Types ───────────────────────────────────────────────────────
