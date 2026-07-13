@@ -145,6 +145,10 @@
     "errorPrefix": "Error: {message}",
     "genericError": "An error occurred.",
     "noStream": "No stream",
+    "thinking": "Thinking...",
+    "thoughtProcess": "Thought process",
+    "searchingReferences": "Searching references...",
+    "referencesUsed": "References used",
     "questions": {
       "q1": "What is the weakest part of my resume?",
       "q2": "What should I tackle first this week?",
@@ -184,6 +188,7 @@
   },
   "AnalysisProgressOverlay": {
     "defaultStage": "Processing your career data…",
+    "reasoningLabel": "AI Reasoning",
     "insights": {
       "0": "Cross-referencing your experience against 10,000+ job market signals to pinpoint your highest-leverage gaps.",
       "1": "Great careers aren't built in a day — we're crafting a structured path that fits your exact timeline.",
@@ -300,6 +305,8 @@
     "subtitle": "Manage your saved plans",
     "defaultUserName": "User",
     "newPlanButton": "Start New Plan",
+    "planLimitReached": "Your new plan was not saved because the 3-plan limit has been reached. Delete an existing plan and try again.",
+    "planMissingResume": "Your new plan could not be saved because its resume data was no longer available. Please re-run the analysis to save it.",
     "weeklyAchievement": "Weekly Achievement",
     "overallStatus": "Overall {completed}/{total} completed ({pct}%)",
     "noPlans": "No career plans saved.",

@@ -145,6 +145,10 @@
     "errorPrefix": "오류: {message}",
     "genericError": "오류가 발생했습니다.",
     "noStream": "스트림 없음",
+    "thinking": "생각 중...",
+    "thoughtProcess": "생각 과정",
+    "searchingReferences": "레퍼런스 검색 중...",
+    "referencesUsed": "참고한 레퍼런스",
     "questions": {
       "q1": "내 이력서에서 가장 부족한 부분이 무엇인가요?",
       "q2": "이번 주에 가장 먼저 해야 할 일이 뭔가요?",
@@ -184,6 +188,7 @@
   },
   "AnalysisProgressOverlay": {
     "defaultStage": "커리어 데이터를 처리하는 중…",
+    "reasoningLabel": "AI 추론",
     "insights": {
       "0": "10,000개 이상의 채용 시장 신호와 당신의 경험을 교차 분석하여 가장 중요한 갭을 찾고 있습니다.",
       "1": "훌륭한 커리어는 하루아침에 만들어지지 않습니다. 당신의 일정에 맞는 체계적인 경로를 설계하고 있습니다.",
@@ -300,6 +305,8 @@
     "subtitle": "저장된 플랜을 관리하세요",
     "defaultUserName": "사용자",
     "newPlanButton": "새 플랜 시작하기",
+    "planLimitReached": "저장 가능한 플랜 수(3개)에 도달해 새 플랜을 저장하지 못했습니다. 기존 플랜을 삭제한 후 다시 시도해 주세요.",
+    "planMissingResume": "이력서 데이터가 남아있지 않아 새 플랜을 저장하지 못했습니다. 분석을 다시 실행한 후 저장해 주세요.",
     "weeklyAchievement": "주차별 달성 현황",
     "overallStatus": "전체 {completed}/{total} 완료 ({pct}%)",
     "noPlans": "저장된 커리어 플랜이 없습니다.",
