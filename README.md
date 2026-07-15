@@ -4,106 +4,46 @@
 
 Upload your resume, paste a job description, and get a personalized week-by-week career plan built by a multi-agent AI pipeline — then generate an ATS-optimized resume once you've completed the plan.
 
+**Live:** [readmycareer.vercel.app](https://readmycareer.vercel.app)
+
 ---
 
 ## Overview
 
 **readmycareer.com** is a proof-of-concept application that demonstrates how a multi-agent LLM system can accelerate career transitions in the tech industry.
 
-The base model is **Gemini 3.1 Flash Lite** (free tier). This model was chosen with Gemini's multimodal generation capabilities in mind as a foundation for future enhancements — richer resume parsing, visual portfolio analysis, and document generation.
+The system runs on a **provider-agnostic model layer**: gap analysis and resume optimization run on a reasoning-tier model (Gemini 2.5 Flash by default), while planning and chat run on a faster, cheaper tier (Gemini Flash Lite). The gap-analysis stage can be switched to OpenAI per request. All model interaction is being incrementally migrated to the **Vercel AI SDK** for streaming, structured outputs, and generative UI.
 
 ## Background & Intent
 
-The existing career recommendation approach lacked contextual understanding, creating a need for an AI product that derives personalized career plans based on user resumes and job descriptions.
+Traditional recruiting platforms and career recommendation systems rely heavily on simple keyword matching (ATS) or superficial analyses of job descriptions. Consequently, they fail to grasp the **multidimensional context of the job market**. readmycareer.com deeply analyzes the relationship between a user's resume and a specific job description, generating an organic, personalized, and highly actionable week-by-week career roadmap via a multi-agent AI system.
 
-Traditional recruiting platforms and career recommendation systems rely heavily on simple keyword matching (ATS) or superficial analyses of job descriptions. Consequently, they fail to grasp the **multidimensional context of the job market**. To address this gap, readmycareer.com deeply analyzes the relationship between a user's resume and a specific job description, generating an organic, personalized, and highly actionable week-by-week career roadmap via a multi-agent AI system.
+### Key Areas of Contextual Gaps in the Job Market
 
-### 1. Key Areas of Contextual Gaps in the Job Market
+Keyword-based resume/JD matching fails to capture five critical dimensions:
 
-Traditional keyword-based matching between a resume and a job description (JD) fails to capture critical dimensions of professional development. These contextual gaps typically manifest in five key areas:
+1. **Technical Terminology & Stack Mismatch** — identical technologies described in different terms (`Container Orchestration` vs `Kubernetes`); no evaluation of skill transferability (AWS ECS experience → GCP Cloud Run).
+2. **Hidden & Implicit Expectations** — a JD listing only "Java, Spring Boot, MySQL" carries unspoken expectations (distributed design, Redis, Kafka, CI/CD) depending on company scale and seniority.
+3. **Company Stage & Culture Fit** — early-stage startups want generalists; enterprises want specialists. Plans that ignore this produce unrealistic milestones.
+4. **Skill Lifecycle & Market Trends** — obsolete requirements copy-pasted from years-old templates must be deprioritized against skills actively valued today.
+5. **Unstructured Progression Trajectories** — recommending Kubernetes to a candidate without Docker fundamentals creates an impractical roadmap; prerequisites matter.
 
-1. **Technical Terminology & Stack Mismatch**
-   - Candidates and hiring organizations often describe identical technologies or concepts using different terms (e.g., `Web Components` vs `React/Vue`, `Container Orchestration` vs `Kubernetes`, or `RAG` vs `Semantic Search`).
-   - Traditional matchers fail to evaluate the **transferability of skills**—such as recognizing that hands-on experience with AWS ECS translates effectively to a GCP Cloud Run environment.
-2. **Hidden & Implicit Expectations**
-   - A job description might only list elementary requirements like "Java, Spring Boot, MySQL." However, depending on the company's scale and the position's seniority, there are unspoken expectations (e.g., distributed system design, caching with Redis, message queuing with Kafka, and automated CI/CD pipelines for senior roles).
-   - Simple text matching gives candidates a distorted signal that merely listing the basic keywords is sufficient for a successful application.
-3. **Company Stage & Culture Fit**
-   - Early-stage startups (e.g., Series A) prioritize agile "generalists" who can wear multiple hats across frontend, backend, and infrastructure to build and iterate MVPs rapidly.
-   - Conversely, enterprises and unicorn companies look for "specialists" who excel in large-scale traffic optimization, adherence to rigorous software development standards, and cross-functional coordination.
-   - Career plans that ignore these organizational contexts result in unrealistic milestones.
-4. **Skill Lifecycle & Market Trends**
-   - The market value and relevance of technologies shift rapidly (e.g., deep expertise in legacy, boilerplate-heavy Redux is often less valued today than proficiency in modern reactive state management or React Server Components).
-   - Systems must filter out obsolete requirements copy-pasted from years-old job templates and prioritize skills actively valued in the current ecosystem.
-5. **Unstructured Progression Trajectories**
-   - A naive matching engine might detect a gap in "Kubernetes" and immediately push it as a high-priority task, failing to recognize that recommending Kubernetes to a candidate who lacks fundamental containerization (Docker) or CI/CD experience creates an overwhelming and impractical roadmap.
+To bridge these gaps, a **Pinecone RAG knowledge base** seeds the agents with industry references across four categories: skill taxonomy & tech synonyms, role & company-tier profiles, learning pathways & roadmaps, and hiring trends & interview frameworks.
 
 ---
-
-### 2. Proposed RAG Reference Architecture & Inventory
-
-To bridge these contextual gaps, we propose seeding the **Pinecone RAG Vector DB** with standard industry references. This external knowledge base empowers the orchestrating agents (GapAnalyzer, Planner, and ResumeOptimizer) to make grounded inferences.
-
-```mermaid
-graph TD
-    RAG["Pinecone RAG Vector DB"] --> CatA["Category A: Skill Taxonomy & Tech Synonyms"]
-    RAG --> CatB["Category B: Role & Company Tier Profiles"]
-    RAG --> CatC["Category C: Learning Pathways & Roadmaps"]
-    RAG --> CatD["Category D: Hiring Trends & Interview Data"]
-
-    CatA --> A1["Tech Stack Equivalence Matrix"]
-    CatA --> A2["Skill Level Rubrics"]
-    
-    CatB --> B1["Company Stage Expectation Guide"]
-    CatB --> B2["Engineering Career Ladder"]
-    
-    CatC --> C1["Domain-Specific Roadmaps"]
-    CatC --> C2["Curated Educational Catalogs"]
-    
-    CatD --> D1["Technical & System Design Handbooks"]
-    CatD --> D2["Global Developer Trend Reports"]
-```
-
-#### Category A: Technology Taxonomy & Synonyms
-*   **Objective**: Standardize technology terminology, resolve synonym mismatches, and map the transferability of skills across different ecosystems.
-*   **Key Inventory Resources**:
-    1.  **Tech Stack Equivalence Matrix**: A mapping database for multi-cloud alternatives (e.g., AWS vs. GCP vs. Azure services) and comparable libraries across frontend/backend frameworks.
-    2.  **Standard Developer Skill Taxonomy**: A hierarchical, tree-structured dictionary linking technology synonyms, shorthand terms, and closely related core concepts.
-    3.  **Skill Level In-Depth Rubrics**: Practical criteria defining what constitutes "Basic," "Intermediate," and "Expert" competency for major tech stacks, moving beyond simple self-evaluations.
-
-#### Category B: Role & Company Tier Profiles
-*   **Objective**: Inject hidden expectations and cultural variables specific to company size, growth stages, and team dynamics.
-*   **Key Inventory Resources**:
-    1.  **Company Stage Specific Expectations Guide**: Guidelines delineating the differing weights of soft skills, generalist capacity, and specialist expertise expected at early-stage startups (Series A), scale-ups (Series B/C), and big tech enterprises.
-    2.  **Standard Engineering Career Ladder**: Detailed capability matrices for Junior, Mid, Senior, Lead, and Principal tiers covering system design scope, business autonomy, and leadership criteria.
-    3.  **Target Company Tech Stack & Culture Profiles**: Curated profiles outlining target company archetypes, their active engineering philosophies, standard deployment flows, and architectural conventions.
-
-#### Category C: Skill Learning & Career Roadmaps
-*   **Objective**: Supply structural guidelines so the Planner agent can sequence daily tasks, learning resources, and milestones logically.
-*   **Key Inventory Resources**:
-    1.  **Standard Domain Learning Pathways**: Structured curricula adapted from roadmap.sh for Frontend, Backend, DevOps, Data Engineering, and AI/ML, detailing strict prerequisite trees.
-    2.  **Curated Learning Materials & Project Catalog**: A database of highly rated official documentation, textbooks, MOOCs, and guided capstone projects categorized by skill gap to ensure actionable, high-quality roadmap recommendations.
-
-#### Category D: Hiring Trends & Interview Frameworks
-*   **Objective**: Ensure the ResumeOptimizer agent emphasizes elements highly valued in modern screenings and prepares candidates for current tech evaluation formats.
-*   **Key Inventory Resources**:
-    1.  **Technical & System Design Interview Handbooks**: A collection of evaluation frameworks, core conceptual rubrics, and system architecture assessment criteria commonly used by modern hiring panels.
-    2.  **Annual Tech Trend Reports Summary**: Synthesized data from industry surveys (e.g., Stack Overflow Developer Survey, State of JS/CSS, Gartner Hype Cycles) to deprioritize legacy skills and highlight emerging high-demand competencies.
-
----
-
 
 ## Features
 
-| Feature | Description |
-|---|---|
-| **Resume parsing** | Upload PDF or DOCX; Gemini extracts structured JSON (skills, experience, education, certifications) |
-| **Gap analysis** | Multi-phase comparison of resume vs. JD; outputs strengths, gaps, priority order, and a match score |
-| **Career roadmap** | Week-by-week action plan with daily todos, milestones, and a Gantt timeline |
-| **AI career coach** | Floating chat interface grounded in your resume, gap analysis, and career plan |
-| **Resume optimizer** | After completing all checklist items, generates an ATS-optimized resume (highlights, cover letter, skills flat-list) |
-| **Bilingual output** | All agent output respects `Accept-Language` — Korean and English supported |
-| **Dashboard** | Authenticated users can save up to 3 career plans and revisit them via `/dashboard` |
+| Feature              | Description                                                                                                           |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Resume parsing**   | Upload PDF or DOCX; structured JSON extraction (skills, experience, education, certifications)                        |
+| **Gap analysis**     | 8-phase comparison of resume vs. JD; outputs strengths, gaps (required vs. preferred), priority order, match score    |
+| **Career roadmap**   | Week-by-week action plan with daily todos, milestones, and a Gantt timeline                                           |
+| **AI career coach**  | Chat interface grounded in your resume, gap analysis, and career plan — with agentic RAG search and visible reasoning |
+| **Resume optimizer** | After completing all checklist items, generates an ATS-optimized resume (highlights, cover letter, projects section)  |
+| **Bilingual output** | All agent output respects `Accept-Language` — Korean and English supported                                            |
+| **Dashboard**        | Authenticated users can save up to 3 career plans and revisit them via `/dashboard`                                   |
+| **Observability**    | Per-stage telemetry (latency, tokens, cache hits, retries, cost) surfaced at `/admin/observability`                   |
 
 ---
 
@@ -111,35 +51,27 @@ graph TD
 
 ```
 readmycareer.com/              (pnpm monorepo)
-├── app/                       Next.js 14 frontend + API routes
-├── agents/                    Multi-agent orchestration layer (Google ADK) ← runtime
-│   ├── gap-analyzer/          Phase-by-phase JD vs. resume comparison
-│   ├── planner/               Week-by-week career plan generator
-│   ├── chat-qna/              Context-aware career coach
-│   ├── resume-optimizer/      ATS resume generation from completed plan
-│   ├── lib/mcp-client.ts      Connection-pooled MCP stdio client
-│   └── orchestrator.ts        Public API surface (runCareerAnalysis, runChatQnA, runResumeOptimizer)
-└── mcp-skills/                MCP stdio subprocesses (spawned by agents/) ← runtime
-    ├── career-knowledge-base/ Pinecone RAG search over career/tech corpus
-    ├── career-plan-generator/ Structured plan JSON generation
-    ├── pdf-word-to-json/      Resume text extraction and normalization
-    └── resume-generator/      Gemini-powered ATS resume synthesis
+├── app/                       Next.js frontend + API routes (SSE streaming, Vercel AI SDK)
+├── agents/                    Agent orchestration layer ← runtime
+│   ├── orchestrator.ts        Pipeline control flow (runCareerAnalysis, runResumeOptimizer)
+│   ├── gap-analyzer/          8-phase JD vs. resume comparison (instruction exports)
+│   ├── planner/               Week-by-week career plan generator (instruction exports)
+│   ├── resume-optimizer/      ATS resume generation (Vercel AI SDK generateObject)
+│   └── lib/
+│       ├── model-adapter.ts   Provider-agnostic ModelAdapter (Gemini / OpenAI)
+│       ├── models.ts          Centralized model ids (GEMINI_MODEL, GEMINI_MODEL_REASONING, OPENAI_MODEL)
+│       ├── observability.ts   Per-stage telemetry, aggregated at the orchestrator boundary
+│       └── mcp-client.ts      Connection-pooled MCP stdio client
+├── mcp-skills/                MCP stdio subprocesses (spawned by agents/) ← runtime
+│   ├── career-knowledge-base/ Pinecone RAG search over career/tech corpus
+│   ├── career-plan-generator/ Structured plan JSON generation
+│   ├── pdf-word-to-json/      Resume text extraction and normalization
+│   └── resume-generator/      ATS resume synthesis
+├── eval/                      TypeScript eval harness (@readmycareer/eval) — dev tooling
+└── config/                    model-pricing.json — single source for per-token pricing
 ```
 
-> `agents/` and `mcp-skills/` are the only runtime packages. All other root-level directories (`eval/`, `documents/`) are development tooling and documentation.
-
-### Gemini CLI workspace skills
-
-`.gemini/skills/` contains workspace skills for [Gemini CLI](https://geminicli.com/docs/cli/skills/) — one skill per agent/subsystem. Each skill packages developer context (I/O specs, constraints, architecture notes) that Gemini activates when you ask it to work on that part of the codebase.
-
-```
-.gemini/skills/
-├── gap-analyzer/      SKILL.md — gap analysis agent context
-├── planner/           SKILL.md — career plan generator context
-├── chat-qna/          SKILL.md — AI career coach context
-├── resume-optimizer/  SKILL.md — ATS resume generation context
-└── mcp-skills/        SKILL.md — MCP stdio subprocess development context
-```
+> `agents/` and `mcp-skills/` are the only runtime packages. `eval/`, `documents/`, and `config/` are development tooling and shared configuration.
 
 ### Agent pipeline
 
@@ -147,206 +79,118 @@ readmycareer.com/              (pnpm monorepo)
 [Resume Upload]  →  pdf-word-to-json (MCP)  →  ResumeJson
 [JD Paste]       →  career-knowledge-base (MCP, Pinecone RAG)  →  JdSearchResult[]
                                         ↓
-                          GapAnalyzerAgent  →  GapAnalysisOutput
-                                        ↓
-                            PlannerAgent    →  CareerPlanOutput
+                          Gap Analysis (reasoning-tier model)  →  GapAnalysisOutput
+                                        ↓                          ⤷ checkpointed to career_plan_jobs
+                          Planning (flash-tier model)          →  CareerPlanOutput
                                         ↓ (after all todos done)
-                       ResumeOptimizerAgent →  OptimizedResumeOutput
+                          Resume Optimization (reasoning-tier) →  OptimizedResumeOutput
 ```
 
-Each step runs inside a **quality gate loop** (up to 3 retries) that validates schema compliance, plan completeness (≥3 todos/week), and date continuity before accepting a result.
+- Every stage boundary is a **Zod-validated contract**.
+- Each step runs inside a **quality gate loop** (up to 3 retries) validating schema compliance, plan completeness (≥3 todos/week), and date continuity before accepting a result.
+- **Durable job checkpoints**: `/api/analyze` persists the gap-analysis result per run (`career_plan_jobs`); a client reconnect resumes from planning instead of re-running the full pipeline.
+
+### Model strategy & trade-offs
+
+All LLM calls route through a provider-agnostic `ModelAdapter` interface:
+
+- **Gap analysis / resume optimization** → `GEMINI_MODEL_REASONING` (default `gemini-2.5-flash`) — the stages where reasoning quality dominates output quality.
+- **Planning / chat** → `GEMINI_MODEL` (default `gemini-3.1-flash-lite-preview`) — latency- and cost-sensitive stages.
+- **OpenAI** — gap analysis can run on OpenAI via the `provider` field on `POST /api/analyze` or `MODEL_PROVIDER`. Planning stays on Gemini to preserve the context-cache path.
+- **Gemini context caching** — resume tokens cached for 1 hour to reduce repeat billing; savings are tracked in observability metrics.
+- Model ids live in `agents/lib/models.ts`; per-1M-token pricing in `config/model-pricing.json` — one source of truth shared by the agent layer and the eval harness.
+
+### Vercel AI SDK adoption (incremental, in progress)
+
+Migration from raw provider SDKs to `ai` + `@ai-sdk/google`, done route by route and verified live end-to-end at each step:
+
+**Done**
+
+- `/api/chat` uses `streamText(...).toUIMessageStreamResponse()`; full conversation history sent as `ModelMessage`s via `convertToModelMessages`.
+- All three chat surfaces (`AICoachChat`, `ChatInterface`, `ChatHistoryClient`) share one `useChat`-based hook and one message renderer — replacing three hand-rolled fetch + SSE-parsing implementations.
+- **Generative UI**: RAG search is a `search_reference` tool the model calls agentically; tool calls and results render inline as source cards.
+- **Reasoning visibility**: Gemini's thinking streams as a `reasoning` UI part (collapsible "thought process" block) via `thinkingConfig`.
+- `resume-optimizer` uses `generateObject` against its Zod schema — no more manual JSON-fence-stripping.
+
+**Pending**
+
+- `GeminiAdapter` context-cache path (intentionally untouched until proven).
+- OpenAI adapter migration.
+
+### Observability
+
+Structured per-stage telemetry — latency, token usage, cache hits, retries, success/failure — is emitted as JSON logs and aggregated at the orchestrator boundary (`agents/lib/observability.ts`). Per-run metrics persist to an RLS-protected `agent_runs` table (written by the API route; agents never touch the DB) and are surfaced at `/admin/observability`: avg/p95 latency, failure rate, retry rate, cache-hit rate, tokens, estimated cost, and cache-token savings. Admin access is enforced via an `is_admin` flag and RLS.
+
+---
+
+## Quality & Evaluation
+
+The eval suite is a TypeScript workspace package (`@readmycareer/eval`, run with `tsx`) that reuses the **same Zod schemas as production** to validate every boundary — one source of truth from agent I/O to eval gates.
+
+- **Agent harness** — gap-analysis **recall/precision vs. labeled gaps**, plan completeness, run-to-run **variance** (`--repeat N`), and a **regression baseline + diff** (`--save-baseline` / `--compare-baseline`).
+- **RAG quality** — four RAGAS metrics reimplemented natively in TypeScript (no JS port exists), plus a **grounding/citation rate** with per-case source attribution.
+- **Cross-model comparison** harness for evaluating model/provider changes before rollout.
+- Ship gates are documented in `eval/QUALITY_CRITERIA.md`; each run regenerates a human-readable report at `documents/agent-eval-report.md`.
+
+```bash
+pnpm eval          # full suite
+pnpm eval:agents   # agent harness only
+pnpm eval:fast     # quick regression check
+```
 
 ---
 
 ## Tech Stack
 
 ### Frontend
-- **Next.js 14** (App Router) + **React 18**
-- **Tailwind CSS** + **Framer Motion** — Synthetic Intelligence design system
+
+- **Next.js** (App Router) + **React**
+- **Vercel AI SDK** (`@ai-sdk/react` `useChat`) — streaming chat, generative UI, reasoning display
+- **Tailwind CSS** + **Framer Motion** — Synthetic Intelligence design system (shadcn/ui tokens)
 - **next-intl** — i18n (English / Korean)
-- **Recharts** — Gantt / progress visualization
-- **react-markdown** — Markdown rendering for resume and plan output
+- **Recharts** — Gantt / progress / competency-radar visualization
 
 ### Backend / API
-- **Next.js API Routes** with **Server-Sent Events (SSE)** for streaming progress
-- **Supabase** (PostgreSQL + Auth + Row-Level Security) — user auth, career plans, chat history, optimized resumes
+
+- **Next.js API Routes** with **SSE** for pipeline progress streaming
+- **Vercel AI SDK** (`ai`, `@ai-sdk/google`) — `streamText`, `generateObject`, UI message streams
+- **Supabase** (PostgreSQL + Auth + Row-Level Security) — users, career plans, chat history, job checkpoints, agent telemetry
 - **pdf-parse** + **mammoth** — PDF and DOCX text extraction
 
 ### AI / Agents
-- **Google Gemini 3.1 Flash Lite Preview** — base LLM for all agents and MCP skills
-- **Google ADK (`@google/adk`)** — multi-agent runner with `InMemorySessionService`
-- **Gemini Context Caching** — resume tokens cached for 1 hour to reduce repeat billing
+
+- **ModelAdapter** — provider-agnostic LLM layer (Gemini + OpenAI implementations)
+- **Gemini 2.5 Flash** (reasoning tier) + **Gemini Flash Lite** (fast tier) — env-overridable
+- **Gemini Context Caching** — resume tokens cached to reduce repeat billing
 - **MCP (Model Context Protocol)** — stdio subprocess pool for skill isolation and reuse
-- **Pinecone** — vector database for career/tech industry RAG context
-- **Zod** — runtime schema validation at every agent I/O boundary
+- **Pinecone** — integrated-inference vector index (`llama-text-embed-v2`) for RAG
+- **Zod** — runtime schema validation at every agent I/O boundary, shared with the eval harness
 
 ### Tooling
+
 - **pnpm workspaces** — monorepo package management
-- **TypeScript 5** across all packages
+- **TypeScript 5** across all packages, including the eval harness
 - **Playwright** — end-to-end testing
-
----
-
-## Model Strategy & Trade-offs
-
-Most agents default to **Gemini 3.1 Flash Lite Preview** — chosen for its free tier, native
-multimodal capability (a foundation for richer resume/portfolio parsing), and very low
-per-token cost. Output quality is held by the retry-based quality gate, so a small, fast model
-is sufficient for the structured-extraction and planning tasks. The two reasoning-heavy synthesis
-stages (gap analysis, resume optimization) run on a stronger model — see "Reasoning-tier model"
-below.
-
-The LLM call path is abstracted behind a provider-agnostic `ModelAdapter`
-([agents/lib/model-adapter.ts](./agents/lib/model-adapter.ts)), so a provider can be swapped
-without touching agent logic or prompts:
-
-| Provider | Default model | Context cache | When to use |
-| --- | --- | --- | --- |
-| **Gemini** (default) | `gemini-3.1-flash-lite-preview` (`GEMINI_MODEL`) | Yes (1h TTL) | Default — lowest cost, multimodal, free tier |
-| **OpenAI** | `gpt-4o-mini` (`OPENAI_MODEL`) | No | Cross-check quality; stronger reasoning on a borderline gap analysis |
-
-Model identifiers and pricing live in a single registry,
-[agents/lib/models.ts](./agents/lib/models.ts); every agent, app route, and MCP skill resolves
-its model from there, so a model bump (or the `GEMINI_MODEL` env override) takes effect
-everywhere from one place.
-
-Select the provider for the gap-analysis stage per request (`"provider": "openai"` in the
-`/api/analyze` body) or globally via `MODEL_PROVIDER`. Planning stays on Gemini to preserve the
-context-cache path. The eval layer compares providers head-to-head:
-
-```bash
-pnpm --filter @readmycareer/eval compare-models   # quality / latency / cost, side by side
-```
-
-> **In one line:** Gemini Flash Lite for cost and multimodal breadth by default; switch a stage
-> to OpenAI/Claude when output quality on a hard case justifies the higher per-token cost. The
-> adapter makes that a one-line change, and `model_comparison.ts` produces the numbers to back it.
-
-### Reasoning-tier model
-
-Gap analysis and resume optimization are reasoning-heavy synthesis stages, so they run on
-`GEMINI_MODEL_REASONING` (default `gemini-2.5-flash`) instead of the flash-lite default. **Gemini
-Pro models are not available on the free tier** — 2.5 Flash is the strongest model reachable
-without enabling billing; confirm this still holds before relying on the default in production.
-Planning and chat stay on `GEMINI_MODEL` (flash-lite) — see
-[agents/lib/models.ts](./agents/lib/models.ts).
-
-### Vercel AI SDK adoption (in progress)
-
-The LLM call path is being migrated to the [Vercel AI SDK](https://ai-sdk.dev/) (`ai` +
-`@ai-sdk/google`) for model neutrality and native streaming/generative-UI support. This is an
-**incremental migration** — done and pending pieces below, kept up to date as it progresses:
-
-**Done:**
-- [app/src/app/api/chat/route.ts](./app/src/app/api/chat/route.ts) — rewritten on `streamText` +
-  `toUIMessageStreamResponse()`. RAG moved from "always search before the model runs" to a
-  `search_reference` tool the model calls agentically (generative UI renders the call/result
-  inline), and `providerOptions.google.thinkingConfig` streams reasoning as a `reasoning` UI part.
-  The full conversation is now sent as `ModelMessage`s via `convertToModelMessages` instead of a
-  single string prompt with no prior turns (a latent bug in the old raw-SSE implementation).
-- [app/src/hooks/useCareerCoachChat.ts](./app/src/hooks/useCareerCoachChat.ts) — a shared hook
-  wrapping `@ai-sdk/react`'s `useChat`, used by all three chat surfaces
-  (`AICoachChat`/`ChatInterface`/`ChatHistoryClient`). Seeds history from Supabase (via
-  `useChatMessages`) and persists each finished turn back to `chat_messages` in `onFinish`.
-- [app/src/components/chat/ChatMessageParts.tsx](./app/src/components/chat/ChatMessageParts.tsx) —
-  one shared renderer for a `UIMessage`'s parts (markdown text, collapsible reasoning block,
-  `search_reference` source card) instead of three copies of the same markdown/bounce-dot JSX.
-- [agents/resume-optimizer/index.ts](./agents/resume-optimizer/index.ts) — uses `generateObject`
-  against a Zod schema instead of a raw JSON-mode call + manual fence-stripping/parsing.
-- **Removed the entire Google ADK layer** (`LlmAgent`/`Runner`/`InMemorySessionService`/
-  `FunctionTool`/`AgentTool`) — it turned out to be dead code, not a pending migration. The
-  ADK-based `ChatQnAAgent` + `runChatQnA` (`agents/chat-qna/`) had zero callers — `/api/chat` has
-  always inlined its own Gemini + RAG logic, never the ADK path. `GapAnalyzerAgent`/`runGapAnalyzer`
-  and `PlannerAgent`/`runPlanner` were the same: standalone dev-only `Runner` wrappers with no
-  callers — the live `runCareerAnalysis` pipeline has only ever called the model directly through
-  `ModelAdapter`, using just the instruction strings (`getGapAnalyzerInstruction`,
-  `PLANNER_INSTRUCTION`) those files still export. Deleted `agents/chat-qna/` entirely, trimmed
-  `gap-analyzer/`/`planner/`/`orchestrator.ts` to the code actually on the live path, and dropped
-  the now-unused `@google/adk` dependency and `SESSION_KEYS`/`ChatMessage`/`ChatQnAInput`/
-  `ChatQnAOutput`/`PlannerInput` types.
-- **Durable career-analysis job checkpoints (Part D)**: `career_plan_jobs`
-  ([supabase/migrations/20260713000000_add_career_plan_jobs.sql](./supabase/migrations/20260713000000_add_career_plan_jobs.sql))
-  gives `/api/analyze` a checkpoint after gap analysis (and again on completion), so a client
-  that reconnects with the `jobId` from the initial `job` SSE event can resume straight into
-  planning instead of re-running the gap-analysis LLM call.
-  [agents/orchestrator.ts](./agents/orchestrator.ts)'s `runCareerAnalysis` gained an optional
-  `checkpoint` param (`precomputedGapAnalysis` to skip Step 1, `onGapAnalysisComplete` to
-  checkpoint a freshly computed one); the frontend
-  ([app/src/components/InitializeWorkspace.tsx](./app/src/components/InitializeWorkspace.tsx))
-  only reuses a `jobId` on retry if the JD/role/duration are unchanged from when it was issued,
-  so an edited input never replays a stale checkpoint. **Scope, as agreed**: this is
-  client-reconnect resumability only — it does not make the serverless function itself survive
-  being killed mid-execution. Anonymous (unauthenticated) `/api/analyze` requests are not
-  checkpointed; job persistence is best-effort and never blocks the analysis response if it
-  fails (e.g. before the migration has been applied).
-
-**Pending — tracked here, not yet done:**
-- `GeminiAdapter` ([agents/lib/adapters/gemini-adapter.ts](./agents/lib/adapters/gemini-adapter.ts))
-  still calls `@google/generative-ai` directly, including the context-cache path
-  (`GoogleAICacheManager`). The AI SDK google provider exposes a `cachedContent` provider option,
-  but this needs verification against the adapter's cache-registry semantics before swapping —
-  don't blind-rewrite it.
-- The OpenAI adapter ([agents/lib/adapters/openai-adapter.ts](./agents/lib/adapters/openai-adapter.ts))
-  is not yet on `@ai-sdk/openai`.
-- The `career-plan-generator` MCP skill ([mcp-skills/career-plan-generator](./mcp-skills/career-plan-generator))
-  is now unreferenced by any live code path — its only caller was the deleted `PlannerAgent`
-  FunctionTool; the live planning step generates the plan via the reasoning-tier model directly,
-  with no MCP round-trip. Left in place pending a decision on whether to remove the skill package
-  or repurpose it.
-
----
-
-## Quality & Evaluation
-
-Two eval layers gate any change to agents, MCP skills, prompts, or RAG (run `pnpm eval`; full
-criteria in [eval/QUALITY_CRITERIA.md](./eval/QUALITY_CRITERIA.md)):
-
-- **Agent output quality** ([eval/src/agent_harness.ts](./eval/src/agent_harness.ts)) — schema
-  compliance, gap-analysis **recall/precision vs. labeled gaps**, plan completeness, date
-  consistency, p95 latency, and cost. Supports run-to-run **variance** (`--repeat N`) and a
-  **regression baseline + diff** (`--save-baseline` / `--compare-baseline`).
-- **RAG retrieval quality** ([eval/src/ragas_eval.ts](./eval/src/ragas_eval.ts)) — RAGAS Faithfulness /
-  Answer Relevancy / Context Precision / Recall, plus a **Grounding / Citation Rate** that
-  records which Pinecone sources each answer is grounded in (the retrieval-level inverse of
-  hallucination).
-
-The table below is generated from the committed eval CSVs by
-[eval/src/render_results.ts](./eval/src/render_results.ts):
-
-<!-- EVAL:START -->
-_Generated by `eval/render_results.py` on 2026-06-01 from the committed eval CSVs._
-
-**Agent Output Quality**
-
-| Metric | Score | Threshold |
-| --- | --- | --- |
-| Schema Compliance | 100.0% | ≥ 95% |
-| Gap Recall (vs labels) | N/A | ≥ 50% |
-| Gap Faithfulness (LLM-judge) | 0.000 | ≥ 0.70 |
-| Plan Completeness | 100.0% | ≥ 90% |
-| Date Consistency | 100.0% | = 100% |
-| p95 Latency | 37.1s | < 30s |
-| Avg Cost / Request | $0.0009 | < $0.01 |
-<!-- EVAL:END -->
-
-Live runs are observable: per-stage latency, retries, token/cache usage, and estimated cost are
-recorded to the `agent_runs` table and surfaced at `/admin/observability`.
 
 ---
 
 ## Roadmap
 
 ### Near-term
-- **Hyperparameter tuning** — optimize temperature, topP, and max tokens per agent for better output consistency and quality
-- **RAG-augmented gap assessment** — when a JD omits explicit skill requirements, use the Pinecone corpus to infer expected competencies for the role level and company tier, improving capability radar accuracy
+
+- **LangSmith tracing** — full distributed traces per pipeline run, beyond the in-house telemetry.
+- **Orchestration framework evaluation** — LangGraph / Mastra for graph-based state management, retries, and branching as first-class primitives.
+- **Complete the Vercel AI SDK migration** — context-cache path and OpenAI adapter.
 
 ### Medium-term
-- **User profile & progress tracking** — persist skill growth, completed resources, and plan milestones across sessions to build a longitudinal career profile
-- **Career plan refinement** — incorporate previous plan history and actual completion rates to produce more realistic and personalized next plans
+
+- **User profile & progress tracking** — persist skill growth and milestones across sessions for a longitudinal career profile.
+- **Career plan refinement** — incorporate plan history and actual completion rates into subsequent plans.
 
 ### Long-term
-- **Practical learning resource recommendations** — surface specific courses, projects, and open-source contributions tailored to identified gaps and the user's current level
-- **Multimodal resume input** — leverage Gemini's multimodal capabilities for richer extraction from visual or image-heavy resumes and portfolios
+
+- **Practical learning resource recommendations** — courses, projects, and open-source contributions tailored to identified gaps.
+- **Multimodal resume input** — richer extraction from visual or image-heavy resumes and portfolios.
 
 ---
 
@@ -357,34 +201,23 @@ recorded to the `agent_runs` table and surfaced at `/admin/observability`.
 - Node.js ≥ 20
 - pnpm ≥ 9
 - A Supabase project
-- A Google AI / Gemini API key
-- A Pinecone API key and index
+- A Google AI / Gemini API key (and optionally an OpenAI API key)
+- A Pinecone API key and integrated-inference index
 
 ### Environment variables
 
 Create `app/.env.local`:
 
-```env
+```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 GOOGLE_API_KEY=
+OPENAI_API_KEY=            # optional — enables provider switching for gap analysis
 PINECONE_API_KEY=
 PINECONE_INDEX_NAME=
-
-# Google Drive → Pinecone sync (career-knowledge-base `sync-drive` tool)
-# Reference (career-trend, README §2 Categories A–D) docs MUST live in the REF folder so they
-# are labeled doc_type="reference". If REF is unset, those docs (if placed in the JD folder)
-# are ingested as doc_type="jd", and reference-grounding retrieval + eval return nothing.
-GOOGLE_DRIVE_FOLDER_ID_JD=
-GOOGLE_DRIVE_FOLDER_ID_REF=
-
-# Optional — model abstraction
-# GEMINI_MODEL=                # override the Gemini model for ALL agents, app routes, and
-#                              # MCP skills at once (single switch point; default
-#                              # gemini-3.1-flash-lite-preview). See agents/lib/models.ts.
-# MODEL_PROVIDER=gemini        # default provider for the gap-analysis stage (gemini | openai)
-# OPENAI_API_KEY=              # required only when running a stage on OpenAI
-# OPENAI_MODEL=gpt-4o-mini     # override the default OpenAI model
+GEMINI_MODEL=              # optional override, default flash-lite
+GEMINI_MODEL_REASONING=    # optional override, default gemini-2.5-flash
+MODEL_PROVIDER=            # optional, "gemini" (default) | "openai"
 ```
 
 ### Install and run
