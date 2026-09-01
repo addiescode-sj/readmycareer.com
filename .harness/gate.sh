@@ -11,7 +11,7 @@ status() { if [ -f "$PLAN" ]; then sed -n 's/^status: *//p' "$PLAN" | head -1; e
 # Paths always writable regardless of plan status (planning artifacts + scratch).
 allowed() {
   case "${1#"$ROOT"/}" in
-    PLAN.md|TASK.md|AGENTS.md|CLAUDE.md|documents/*|.harness/*|.claude/*|/tmp/*|/private/tmp/*) return 0 ;;
+    PLAN.md|TASK.md|AGENTS.md|CLAUDE.md|CHANGELOG.md|README.md|documents/*|.harness/*|.claude/*|/tmp/*|/private/tmp/*) return 0 ;;
     jest.config.mjs|playwright.config.ts|.github/*) return 0 ;;
     *) return 1 ;;
   esac

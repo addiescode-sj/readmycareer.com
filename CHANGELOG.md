@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0] - 2026-09-02
+
+### Added
+
+- **Plan-gated development harness**: [.harness/gate.sh](.harness/gate.sh) is a single enforcement
+  point that blocks every code edit until `PLAN.md` reaches status `approved` with atomic tasks
+  broken out in `TASK.md`. Claude Code enforces it through a `PreToolUse` hook; Codex follows the
+  same contract documented in [AGENTS.md](AGENTS.md), so both tools share one workflow. Planning
+  ambiguities must be surfaced to the user as explicit choices rather than resolved by assumption,
+  and the decisions land in `PLAN.md` where workers can read them.
+- **Document-driven session context**: `/plan-harness` (plan → verify → parallel run → archive)
+  hands every worker only `PLAN.md` and `TASK.md`, never conversation history — so a new session
+  resumes from checked-in documents instead of a summary that died with the last one. Finished
+  plans archive to `documents/plans/<date>-<title>/`.
+- **Role-separated parallel subagents**: `impl`, `test-author`, and `refactorer`
+  ([.claude/agents/](.claude/agents/)) have disjoint write scopes, so `impl` and `test-author` run
+  concurrently without collision. Tests are derived from `PLAN.md`'s DoD rather than from a
+  half-written implementation, which keeps them from degenerating into assertions that the code
+  already passes.
+- **Automated test gate after implementation**: a `Stop` hook enforces, in order, that every
+  changed runtime module has a sibling unit test, that `pnpm test` is green (by refactoring the
+  implementation — weakening or skipping a test is prohibited), and only then that `pnpm test:e2e`
+  passes. Attempts are capped by `HARNESS_MAX_LOOPS` (default 5), and an unrunnable browser is
+  reported as an environment problem instead of being looped on.
+- **Test infrastructure**: Jest (ESM via `@swc/jest`) scoped to `agents/` and `mcp-skills/`
+  ([jest.config.mjs](jest.config.mjs)), and Playwright with a `webServer` that boots `pnpm dev`
+  ([playwright.config.ts](playwright.config.ts)). Local runs drive the system Chrome so a
+  developer machine needs no browser download; CI installs Playwright's pinned build and runs
+  both suites in the same order the local gate enforces.
+
+### Fixed
+
+- **Model pricing map**: the `_comment` documentation key in
+  [config/model-pricing.json](config/model-pricing.json) was loaded into `MODEL_PRICING`, so any
+  caller iterating the map saw a bogus model id with `undefined` input/output rates. `_`-prefixed
+  keys are now filtered at the loader. Found by the first unit test written against the registry.
+
+---
+
 ## [0.8.0] - 2026-07-13
 
 ### Added
