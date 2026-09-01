@@ -65,12 +65,37 @@
       "mcp__supabase__execute_sql",
       "WebFetch(domain:geminicli.com)",
       "Skill(ralph-loop:ralph-loop)",
-      "Skill(ralph-loop:ralph-loop:*)"
+      "Skill(ralph-loop:ralph-loop:*)",
+      "Bash(.harness/gate.sh:*)"
     ],
     "additionalDirectories": [
       "/tmp",
       "/Users/addie.lee/work/readmycareer.com/app/src/app/api/career-plans",
       "/Users/addie.lee/work/readmycareer.com/app/src/app/api/career-plans/[id]"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.harness/gate.sh check"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 900,
+            "command": "$CLAUDE_PROJECT_DIR/.harness/gate.sh stopcheck"
+          }
+        ]
+      }
     ]
   },
   "enabledMcpjsonServers": [

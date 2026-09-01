@@ -154,8 +154,13 @@ readmycareer-c547f96903fa.json
 .DS_Store
 Thumbs.db
 
-# Claude Code local settings (machine-specific, not for sharing)
-.claude/
+# Claude Code: local/machine-specific state is ignored, but the shared harness
+# (skills, subagent definitions, project settings incl. hooks) is checked in.
+.claude/*
+!.claude/settings.json
+!.claude/skills/
+!.claude/agents/
+.claude/settings.local.json
 .clauderc
 .mcp.json
 
@@ -178,3 +183,17 @@ agents/test-optimizer-full.mjs
 supabase/.branches/
 supabase/.temp/
 
+
+# harness runtime artifacts (plan gate, test loop state, playwright reports)
+.harness/off
+.harness/logs/
+.harness/loop-count
+.harness/pw-results/
+.harness/pw-report/
+test-results/
+
+# Playwright
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
