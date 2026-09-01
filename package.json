@@ -13,9 +13,18 @@
     "build": "pnpm -r build",
     "eval": "pnpm --filter @readmycareer/eval eval",
     "eval:agents": "pnpm --filter @readmycareer/eval eval:agents",
-    "eval:fast": "pnpm --filter @readmycareer/eval eval:fast"
+    "eval:fast": "pnpm --filter @readmycareer/eval eval:fast",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:e2e": "pnpm --filter @readmycareer/app exec playwright test -c ../playwright.config.ts"
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@swc/jest": "^0.2.39",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.4.1",
+    "jest": "^30.5.1"
   }
 }
