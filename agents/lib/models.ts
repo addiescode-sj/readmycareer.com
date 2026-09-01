@@ -45,7 +45,12 @@ function loadModelPricing(): Record<string, ProviderPricing> {
   for (let i = 0; i < 8; i++) {
     try {
       const raw = readFileSync(resolve(dir, "config/model-pricing.json"), "utf8");
-      return JSON.parse(raw) as Record<string, ProviderPricing>;
+      // Drop "_"-prefixed doc keys (e.g. _comment) so callers can iterate the map safely.
+      return Object.fromEntries(
+        Object.entries(JSON.parse(raw) as Record<string, ProviderPricing>).filter(
+          ([k]) => !k.startsWith("_")
+        )
+      );
     } catch {
       const parent = resolve(dir, "..");
       if (parent === dir) break; // reached filesystem root
